@@ -42,6 +42,22 @@ function nextId(rows) {
   return rows.length > 0 ? Math.max(...rows.map(r => r.id)) + 1 : 1;
 }
 
+// Word-overlap similarity, used to dedupe near-identical tasks/FAQs that
+// come from overlapping scan windows (e.g. the same request phrased
+// slightly differently by the live listener vs. a later history scan).
+function normalizeWords(text) {
+  return (text || '').toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean);
+}
+function wordOverlapRatio(a, b) {
+  const wa = new Set(normalizeWords(a));
+  const wb = new Set(normalizeWords(b));
+  if (wa.size === 0 || wb.size === 0) return 0;
+  let common = 0;
+  for (const w of wa) if (wb.has(w)) common++;
+  return common / Math.min(wa.size, wb.size);
+}
+const DUPLICATE_THRESHOLD = 0.35;
+
 // ---------- Settings ----------
 export async function getSettings() {
   return readJson('settings.json', {});
@@ -136,10 +152,19 @@ export async function getLatestSummaries() {
 }
 
 // ---------- Action items ----------
+// Dedupes against ALL existing items for the same chat (open or completed) —
+// overlapping scan windows (live listener + history scan, or two history
+// scans) commonly rediscover the same request worded slightly differently.
 export async function insertActionItems(chatId, items) {
   const all = await readJson('action_items.json', []);
+  const existingForChat = all.filter(a => a.chat_id === chatId);
+  const fresh = items.filter(it =>
+    !existingForChat.some(ex => wordOverlapRatio(ex.task, it.task) >= DUPLICATE_THRESHOLD)
+  );
+  if (fresh.length === 0) return [];
+
   let id = nextId(all);
-  const created = items.map(it => ({
+  const created = fresh.map(it => ({
     id: id++,
     chat_id: chatId,
     task: it.task,
@@ -245,6 +270,22 @@ export async function saveFaq(faq) {
   await writeJson('faq.json', all);
   return entry;
 }
+// Bulk insert with dedup against existing FAQs — used by the history scan's
+// recurring-motif analysis, which can suggest the same theme repeatedly
+// across chats/runs. Manual single-add (saveFaq) stays dedup-free since
+// that's a deliberate user action.
+export async function insertFaqSuggestions(suggestions) {
+  const all = await getFaqs();
+  const fresh = suggestions.filter(s =>
+    !all.some(ex => wordOverlapRatio(ex.question, s.question) >= DUPLICATE_THRESHOLD)
+  );
+  if (fresh.length === 0) return [];
+  let id = nextId(all);
+  const created = fresh.map(s => ({ id: id++, question: s.question, answer: s.answer }));
+  await writeJson('faq.json', [...all, ...created]);
+  return created;
+}
+
 export async function updateFaq(id, patch) {
   const all = await getFaqs();
   const idx = all.findIndex(f => f.id === id);

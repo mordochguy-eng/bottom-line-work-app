@@ -61,6 +61,19 @@ export async function fetchChats(apiUrl, idInstance, apiTokenInstance) {
   }
 }
 
+// Unfiltered version of the above — every chat on the account, individuals
+// included. Used by the history scan to build the "unsaved individuals"
+// segment (raw chats minus whichever ones are in the named-contacts list).
+export async function fetchAllChatsRaw(apiUrl, idInstance, apiTokenInstance) {
+  const url = `${getBaseUrl(apiUrl, idInstance)}/getChats/${apiTokenInstance}`;
+  const response = await axios.get(url, { timeout: 15000 });
+  return (response.data || []).map(chat => ({
+    chat_id: chat.id,
+    name: chat.name || chat.id,
+    isGroup: chat.id?.endsWith('@g.us')
+  }));
+}
+
 // Every incoming message across the WHOLE account (all chats, groups and
 // individuals) within the last N minutes, in one call — used for the
 // historical-scan feature so it doesn't need to enumerate every chat
