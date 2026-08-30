@@ -245,9 +245,11 @@ app.post('/api/message-listener/sync-now', async (req, res) => {
 
 app.post('/api/history-scan/start', (req, res) => {
   try {
-    const days = Number(req.body.days) || 7;
+    const days = req.body.days != null ? Number(req.body.days) : 7; // 0 = no time cutoff
     const limit = req.body.limit != null ? Number(req.body.limit) : null;
-    res.json(startHistoryScan({ days, limit }));
+    const segmentKeys = Array.isArray(req.body.segmentKeys) ? req.body.segmentKeys : null;
+    const extractTasks = req.body.extractTasks != null ? !!req.body.extractTasks : true;
+    res.json(startHistoryScan({ days, limit, segmentKeys, extractTasks }));
   } catch (error) { handleError(res, error); }
 });
 

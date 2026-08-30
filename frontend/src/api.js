@@ -45,7 +45,7 @@ export const api = {
   toggleAutoReply: (enabled) => request('/auto-reply/toggle', { method: 'POST', body: JSON.stringify({ enabled }) }),
   toggleLiveInsights: (enabled) => request('/live-insights/toggle', { method: 'POST', body: JSON.stringify({ enabled }) }),
   syncMessagesNow: () => request('/message-listener/sync-now', { method: 'POST' }),
-  startHistoryScan: (days, limit) => request('/history-scan/start', { method: 'POST', body: JSON.stringify({ days, limit }) }),
+  startHistoryScan: (opts) => request('/history-scan/start', { method: 'POST', body: JSON.stringify(opts) }),
   getHistoryScanStatus: () => request('/history-scan/status'),
 
   getSyncConfig: () => request('/sync/config'),

@@ -13,6 +13,8 @@ export default function TasksPage() {
   const [syncing, setSyncing] = useState(false);
   const [scanDays, setScanDays] = useState(7);
   const [scanLimit, setScanLimit] = useState(0);
+  const [scanSegments, setScanSegments] = useState({ namedAndGroups: true, unsavedIndividuals: true });
+  const [scanExtractTasks, setScanExtractTasks] = useState(true);
   const [scanStatus, setScanStatus] = useState(null);
   const toast = useToast();
 
@@ -75,8 +77,10 @@ export default function TasksPage() {
   }
 
   async function handleHistoryScan() {
+    const segmentKeys = Object.entries(scanSegments).filter(([, on]) => on).map(([key]) => key);
+    if (segmentKeys.length === 0) { toast('בחר לפחות פלח אחד לסריקה', 'error'); return; }
     try {
-      const s = await api.startHistoryScan(scanDays, scanLimit || null);
+      const s = await api.startHistoryScan({ days: scanDays, limit: scanLimit || null, segmentKeys, extractTasks: scanExtractTasks });
       setScanStatus(s);
       pollScanStatus();
     } catch (err) { toast(err.message, 'error'); }
@@ -116,6 +120,7 @@ export default function TasksPage() {
               <option value={7}>שבוע</option>
               <option value={14}>שבועיים</option>
               <option value={30}>חודש</option>
+              <option value={0}>כל ההיסטוריה</option>
             </select>
             <input
               className="form-input"
@@ -140,9 +145,25 @@ export default function TasksPage() {
         </div>
       </div>
 
-      <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: -18, marginBottom: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap', marginBottom: 10, fontSize: '0.85rem' }}>
+        <span style={{ color: 'var(--text-muted)' }}>פלחים לסריקה:</span>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <input type="checkbox" checked={scanSegments.namedAndGroups} onChange={(e) => setScanSegments(p => ({ ...p, namedAndGroups: e.target.checked }))} />
+          אנשי קשר שמורים + קבוצות
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <input type="checkbox" checked={scanSegments.unsavedIndividuals} onChange={(e) => setScanSegments(p => ({ ...p, unsavedIndividuals: e.target.checked }))} />
+          צ'אטים אישיים לא שמורים
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <input type="checkbox" checked={scanExtractTasks} onChange={(e) => setScanExtractTasks(e.target.checked)} />
+          גם ליצור משימות (לא רק לאפיין שאלות)
+        </label>
+      </div>
+
+      <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: 0, marginBottom: 10 }}>
         כשההאזנה פעילה, כל הודעה נכנסת (בקבוצות ובצ'אטים אישיים) נבדקת אוטומטית ברקע — כשהתור ריק היא נבדקת כל כמה שניות, וכשמצטברות כמה הודעות ביחד היא מרוקנת אותן ברצף מהיר. "סנכרן עכשיו" מריק את התור מיידית בלי לחכות, כולל כל מה שהצטבר מאז הפעם האחרונה (Green API שומר את התור גם כשההאזנה כבויה, לזמן מוגבל).
-        "נתח היסטוריה" סורק את כל הצ'אטים בשני פלחים — אנשי קשר שמורים+קבוצות, וצ'אטים אישיים לא שמורים — ומחפש בכל פלח שאלות שחוזרות על עצמן, כדי להציע שאלות נפוצות (FAQ) ללשונית "תור אישור תגובות". משימות כפולות (מהאזנה חיה או מריצות קודמות) מדולגות אוטומטית.
+        "נתח היסטוריה" סורק את הפלחים שנבחרו ומחפש בכל אחד שאלות שחוזרות על עצמן, כדי להציע שאלות נפוצות (FAQ) ללשונית "תור אישור תגובות". ביטול "גם ליצור משימות" מריץ רק את איסוף השאלות לאפיון — הרבה יותר מהיר, בלי ליצור משימות לפניות ישנות. משימות כפולות מדולגות אוטומטית.
       </p>
 
       {scanStatus && (scanStatus.running || scanStatus.finishedAt) && (
