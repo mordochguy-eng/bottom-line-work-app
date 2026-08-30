@@ -9,7 +9,9 @@ const defaults = {
   geminiApiKey: '',
   recipientChatId: '',
   digestTime: '21:00',
-  briefingTime: '07:30'
+  briefingTime: '07:30',
+  workerUrl: '',
+  workerAuthToken: ''
 };
 
 export default function SettingsPage() {
@@ -20,14 +22,17 @@ export default function SettingsPage() {
   const [syncConfig, setSyncConfig] = useState(null);
   const [syncLog, setSyncLog] = useState([]);
   const [syncing, setSyncing] = useState(false);
+  const [workerStatus, setWorkerStatus] = useState(null);
+  const [workerSyncing, setWorkerSyncing] = useState(false);
   const toast = useToast();
 
   async function load() {
     try {
-      const [s, sc, sl] = await Promise.all([api.getSettings(), api.getSyncConfig(), api.getSyncLog()]);
+      const [s, sc, sl, ws] = await Promise.all([api.getSettings(), api.getSyncConfig(), api.getSyncLog(), api.getWorkerStatus()]);
       setSettings({ ...defaults, ...s });
       setSyncConfig(sc);
       setSyncLog(sl);
+      setWorkerStatus(ws);
     } catch (err) { toast(err.message, 'error'); }
   }
 
@@ -59,6 +64,17 @@ export default function SettingsPage() {
       toast(`הסנכרון הצליח (${result.repo}). האפליקציה מתאתחלת מחדש...`, 'success');
       setTimeout(load, 1500);
     } catch (err) { toast(err.message, 'error'); } finally { setSyncing(false); }
+  }
+
+  async function handleSyncWorkerConfig() {
+    setWorkerSyncing(true);
+    try {
+      await api.saveSettings(settings); // make sure the Worker URL/token fields are saved first
+      await api.syncWorkerConfig();
+      toast('פרטי Green API נשלחו ל-Worker בהצלחה', 'success');
+      const ws = await api.getWorkerStatus();
+      setWorkerStatus(ws);
+    } catch (err) { toast(err.message, 'error'); } finally { setWorkerSyncing(false); }
   }
 
   return (
@@ -120,6 +136,33 @@ export default function SettingsPage() {
               <label className="form-label">שעת תדרוך בוקר</label>
               <input className="form-input" type="time" value={settings.briefingTime} onChange={e => setSettings(p => ({ ...p, briefingTime: e.target.value }))} />
             </div>
+          </div>
+        </div>
+
+        <div className="glass-card">
+          <h3 style={{ marginBottom: 8 }}>☁️ הודעות מתוזמנות בענן (Cloudflare Worker)</h3>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', marginBottom: 14 }}>
+            אופציונלי. כשמוגדר, הודעות מתוזמנות נשלחות דרך שירות ענן קטן ונפרד — כך שהן יוצאות בזמן גם אם המחשב הזה כבוי. שאר האפליקציה (סיכומים, משימות, האזנה חיה) ממשיכה לרוץ מקומית כרגיל. הקמה חד-פעמית מתוארת ב-<code>cloudflare-worker/README.md</code>.
+          </p>
+          <div className="form-row">
+            <div className="form-group">
+              <label className="form-label">כתובת ה-Worker</label>
+              <input className="form-input" value={settings.workerUrl} onChange={e => setSettings(p => ({ ...p, workerUrl: e.target.value }))} placeholder="https://your-worker.workers.dev" />
+            </div>
+            <div className="form-group">
+              <label className="form-label">טוקן אבטחה (AUTH_TOKEN)</label>
+              <input className="form-input" type="password" value={settings.workerAuthToken} onChange={e => setSettings(p => ({ ...p, workerAuthToken: e.target.value }))} />
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button type="button" className="btn btn-primary" onClick={handleSyncWorkerConfig} disabled={workerSyncing || !settings.workerUrl || !settings.workerAuthToken}>
+              {workerSyncing ? 'שולח...' : '☁️ שמור וסנכרן פרטי Green API ל-Worker'}
+            </button>
+            {workerStatus?.configured && (
+              <span className={`badge ${workerStatus.connected ? 'badge-success' : 'badge-danger'}`}>
+                {workerStatus.connected ? (workerStatus.greenApiConfigured ? 'מחובר ומוגדר' : 'מחובר, חסרים פרטי Green API') : 'לא ניתן להתחבר'}
+              </span>
+            )}
           </div>
         </div>
 

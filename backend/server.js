@@ -9,6 +9,7 @@ import * as scheduler from './scheduler.js';
 import * as sync from './sync.js';
 import { startMessageListener, drainQueueNow } from './messageListener.js';
 import { startHistoryScan, getScanStatus } from './historyScan.js';
+import * as workerProxy from './workerProxy.js';
 
 const app = express();
 app.use(cors());
@@ -193,23 +194,61 @@ app.post('/api/action-items/:id/toggle-save', async (req, res) => {
 });
 
 // ---------- Scheduled messages ----------
+// Once a Cloudflare Worker is configured, scheduled messages live entirely
+// in its KV store (so they keep sending while this computer is off) — the
+// local JSON file is only the source of truth when no Worker is set up.
 app.get('/api/scheduled-messages', async (req, res) => {
-  try { res.json(await db.getScheduledMessages()); } catch (error) { handleError(res, error); }
+  try {
+    const settings = await db.getSettings();
+    if (workerProxy.isWorkerConfigured(settings)) return res.json(await workerProxy.getMessages(settings));
+    res.json(await db.getScheduledMessages());
+  } catch (error) { handleError(res, error); }
 });
 
 app.post('/api/scheduled-messages', async (req, res) => {
   try {
+    const settings = await db.getSettings();
     const body = { ...req.body, chat_id: scheduler.normaliseChatId(req.body.chat_id) };
+    if (workerProxy.isWorkerConfigured(settings)) return res.json(await workerProxy.createMessage(settings, body));
     res.json(await db.saveScheduledMessage(body));
   } catch (error) { handleError(res, error); }
 });
 
 app.put('/api/scheduled-messages/:id', async (req, res) => {
-  try { res.json(await db.updateScheduledMessage(Number(req.params.id), req.body)); } catch (error) { handleError(res, error); }
+  try {
+    const settings = await db.getSettings();
+    if (workerProxy.isWorkerConfigured(settings)) return res.json(await workerProxy.updateMessage(settings, Number(req.params.id), req.body));
+    res.json(await db.updateScheduledMessage(Number(req.params.id), req.body));
+  } catch (error) { handleError(res, error); }
 });
 
 app.delete('/api/scheduled-messages/:id', async (req, res) => {
-  try { await db.deleteScheduledMessage(Number(req.params.id)); res.json({ ok: true }); } catch (error) { handleError(res, error); }
+  try {
+    const settings = await db.getSettings();
+    if (workerProxy.isWorkerConfigured(settings)) { await workerProxy.deleteMessage(settings, Number(req.params.id)); return res.json({ ok: true }); }
+    await db.deleteScheduledMessage(Number(req.params.id));
+    res.json({ ok: true });
+  } catch (error) { handleError(res, error); }
+});
+
+app.post('/api/worker/sync-config', async (req, res) => {
+  try {
+    const settings = await db.getSettings();
+    if (!workerProxy.isWorkerConfigured(settings)) throw new Error('לא הוגדרו כתובת ה-Worker והטוקן בהגדרות');
+    await workerProxy.pushConfig(settings);
+    res.json({ ok: true });
+  } catch (error) { handleError(res, error); }
+});
+
+app.get('/api/worker/status', async (req, res) => {
+  try {
+    const settings = await db.getSettings();
+    if (!workerProxy.isWorkerConfigured(settings)) return res.json({ configured: false, connected: false });
+    const status = await workerProxy.getWorkerStatus(settings);
+    res.json({ configured: true, connected: true, greenApiConfigured: !!status.configured });
+  } catch (error) {
+    res.json({ configured: true, connected: false, error: error.message });
+  }
 });
 
 app.post('/api/check-phone', async (req, res) => {
@@ -473,6 +512,11 @@ cron.schedule('* * * * *', async () => {
   try {
     const settings = await db.getSettings();
     if (!settings.apiUrl) return;
+    // The Cloudflare Worker owns dispatch once configured — messages live
+    // in its KV store, not here, so running this too would either find
+    // nothing (harmless) or, if something was ever mirrored locally,
+    // double-send. Simplest correct answer: skip entirely.
+    if (workerProxy.isWorkerConfigured(settings)) return;
     const all = await db.getScheduledMessages();
     const now = new Date();
     for (const msg of all) {

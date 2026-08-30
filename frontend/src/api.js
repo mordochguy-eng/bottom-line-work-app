@@ -33,6 +33,9 @@ export const api = {
   updateScheduledMessage: (id, patch) => request(`/scheduled-messages/${id}`, { method: 'PUT', body: JSON.stringify(patch) }),
   deleteScheduledMessage: (id) => request(`/scheduled-messages/${id}`, { method: 'DELETE' }),
 
+  getWorkerStatus: () => request('/worker/status'),
+  syncWorkerConfig: () => request('/worker/sync-config', { method: 'POST' }),
+
   getContacts: () => request('/contacts'),
   createContact: (contact) => request('/contacts', { method: 'POST', body: JSON.stringify(contact) }),
   deleteContact: (id) => request(`/contacts/${id}`, { method: 'DELETE' }),
