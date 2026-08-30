@@ -3,25 +3,27 @@ import * as greenApi from './greenApi.js';
 import { scanChatForActions, identifyRecurringMotifs } from './gemini.js';
 
 /**
- * On-demand historical backfill across the WHOLE account, split into two
- * segments — saved contacts + groups vs. unsaved individuals — because they
- * tend to ask different kinds of things (the whole point of the split is to
- * later characterize each separately).
+ * On-demand historical backfill, split into two segments — saved contacts +
+ * groups vs. unsaved individuals — since they tend to ask different kinds
+ * of things (the whole point of the split is to characterize each
+ * separately). Configurable per run: which segment(s), how far back
+ * (days=0 means no time cutoff — everything getChatHistory returns), a
+ * chat-count cap, and whether to also extract action items or just collect
+ * questions for the motif analysis (much faster when the answer is "just
+ * characterize what people ask" over a large, old-message segment).
  *
  * getChatHistory works per chat regardless of Green API's notification
  * settings (it syncs directly from WhatsApp), so this reliably reaches real
- * history; the cost is one API call per chat. Runs as a background job
- * (not inside the request) since a full pass over ~2,300 chats takes
- * several minutes — the frontend starts it and polls getScanStatus().
- *
- * Two extra things happen beyond simple task extraction:
- *  - insertActionItems already dedupes against existing tasks for the same
- *    chat, so re-running (or overlapping with the live listener) doesn't
- *    pile up near-duplicate tasks.
- *  - every incoming (non-"אני") message is also collected per segment; once
- *    the crawl is done, one Gemini call per segment looks for recurring
- *    themes and proposes FAQ entries for the auto-reply feature.
+ * history; the cost is one API call per chat, plus one Gemini call per chat
+ * when task extraction is on. Runs as a background job (not inside the
+ * request) since a full pass can take minutes — the frontend starts it and
+ * polls getScanStatus().
  */
+
+const SEGMENTS = {
+  namedAndGroups: 'אנשי קשר שמורים וקבוצות',
+  unsavedIndividuals: 'צ׳אטים אישיים לא שמורים'
+};
 
 const MAX_QUESTIONS_PER_SEGMENT = 400; // keeps the motif-analysis prompt bounded
 
@@ -46,12 +48,20 @@ export function getScanStatus() {
   return { ...state };
 }
 
-export function startHistoryScan({ days, limit }) {
+/**
+ * options:
+ *   days           - 0/null = no time cutoff (all available history)
+ *   limit           - 0/null = no chat-count cap
+ *   segmentKeys     - subset of Object.keys(SEGMENTS); omit/null = both
+ *   extractTasks    - default true; false = only collect questions for the
+ *                     motif analysis, skip the per-chat task-extraction call
+ */
+export function startHistoryScan(options) {
   if (state.running) {
     throw new Error('סריקת היסטוריה כבר רצה — המתן שתסתיים');
   }
   state = { ...defaultState(), running: true, startedAt: new Date().toISOString() };
-  runScan({ days, limit }).catch(err => {
+  runScan(options).catch(err => {
     state.error = err.message;
   }).finally(() => {
     state.running = false;
@@ -82,21 +92,18 @@ async function buildSegments(settings) {
     .filter(c => !c.isGroup && !namedContactIds.has(c.chat_id))
     .map(c => ({ chat_id: c.chat_id, name: c.name, isGroup: false }));
 
-  return {
-    'אנשי קשר שמורים וקבוצות': namedAndGroups,
-    'צ׳אטים אישיים לא שמורים': unsavedIndividuals
-  };
+  return { namedAndGroups, unsavedIndividuals };
 }
 
-async function scanSegment(settings, label, targets, cutoffSeconds, remainingLimit) {
+async function scanSegment(settings, label, targets, cutoffSeconds, remainingLimit, extractTasks) {
   const questions = [];
   let count = 0;
   for (const target of targets) {
     if (remainingLimit != null && count >= remainingLimit) break;
     count++;
     try {
-      const history = await greenApi.fetchChatHistory(settings.apiUrl, settings.idInstance, settings.apiTokenInstance, target.chat_id, 50);
-      const recent = history.filter(m => m.timestamp >= cutoffSeconds);
+      const history = await greenApi.fetchChatHistory(settings.apiUrl, settings.idInstance, settings.apiTokenInstance, target.chat_id, 100);
+      const recent = cutoffSeconds ? history.filter(m => m.timestamp >= cutoffSeconds) : history;
       if (recent.length > 0) {
         state.chatsWithHistory++;
 
@@ -106,17 +113,19 @@ async function scanSegment(settings, label, targets, cutoffSeconds, remainingLim
           }
         }
 
-        const messages = recent.map(m => ({ senderName: m.sender_name, text: m.body, timestamp: m.timestamp }));
-        const result = await scanChatForActions(settings.geminiApiKey, { chatName: target.name, isGroup: target.isGroup, messages });
-        const items = result?.items || [];
-        if (items.length) {
-          const created = await db.insertActionItems(target.chat_id, items.map(it => ({
-            task: it.task,
-            category: it.category || null,
-            assignee: it.sender || target.name,
-            deadline: it.deadline || null
-          })));
-          state.itemsAdded += created.length;
+        if (extractTasks) {
+          const messages = recent.map(m => ({ senderName: m.sender_name, text: m.body, timestamp: m.timestamp }));
+          const result = await scanChatForActions(settings.geminiApiKey, { chatName: target.name, isGroup: target.isGroup, messages });
+          const items = result?.items || [];
+          if (items.length) {
+            const created = await db.insertActionItems(target.chat_id, items.map(it => ({
+              task: it.task,
+              category: it.category || null,
+              assignee: it.sender || target.name,
+              deadline: it.deadline || null
+            })));
+            state.itemsAdded += created.length;
+          }
         }
       }
     } catch (err) {
@@ -128,7 +137,7 @@ async function scanSegment(settings, label, targets, cutoffSeconds, remainingLim
   return { questions, chatsUsed: count };
 }
 
-async function runScan({ days, limit }) {
+async function runScan({ days, limit, segmentKeys, extractTasks = true }) {
   const settings = await db.getSettings();
   if (!settings.apiUrl || !settings.idInstance || !settings.apiTokenInstance) {
     throw new Error('לא הוגדרו פרטי Green API בהגדרות');
@@ -137,18 +146,21 @@ async function runScan({ days, limit }) {
     throw new Error('לא הוגדר מפתח Gemini בהגדרות');
   }
 
-  const cutoffSeconds = Math.floor(Date.now() / 1000) - Math.round(days * 24 * 60 * 60);
-  const segments = await buildSegments(settings);
+  const cutoffSeconds = days && days > 0 ? Math.floor(Date.now() / 1000) - Math.round(days * 24 * 60 * 60) : null;
+  const allSegments = await buildSegments(settings);
+  const keys = segmentKeys && segmentKeys.length ? segmentKeys : Object.keys(SEGMENTS);
 
-  const totalEligible = Object.values(segments).reduce((sum, arr) => sum + arr.length, 0);
+  const totalEligible = keys.reduce((sum, key) => sum + (allSegments[key]?.length || 0), 0);
   state.totalEligible = totalEligible;
   state.chatsAttempted = limit && limit > 0 ? Math.min(limit, totalEligible) : totalEligible;
 
   let remainingLimit = limit && limit > 0 ? limit : null;
   const questionsBySegment = {};
 
-  for (const [label, targets] of Object.entries(segments)) {
-    const { questions, chatsUsed } = await scanSegment(settings, label, targets, cutoffSeconds, remainingLimit);
+  for (const key of keys) {
+    const label = SEGMENTS[key];
+    const targets = allSegments[key] || [];
+    const { questions, chatsUsed } = await scanSegment(settings, label, targets, cutoffSeconds, remainingLimit, extractTasks);
     questionsBySegment[label] = questions;
     if (remainingLimit != null) remainingLimit = Math.max(0, remainingLimit - chatsUsed);
   }
