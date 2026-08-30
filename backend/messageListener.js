@@ -76,6 +76,7 @@ async function runLiveInsights(settings, parsed) {
   if (result?.needsAction && result.task) {
     await db.insertActionItems(parsed.chatId, [{
       task: result.task,
+      category: result.category || null,
       assignee: parsed.senderName,
       deadline: result.deadline || null
     }]);

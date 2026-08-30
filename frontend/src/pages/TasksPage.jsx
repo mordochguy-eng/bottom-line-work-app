@@ -12,7 +12,8 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [scanDays, setScanDays] = useState(7);
-  const [scanning, setScanning] = useState(false);
+  const [scanLimit, setScanLimit] = useState(50);
+  const [scanStatus, setScanStatus] = useState(null);
   const toast = useToast();
 
   async function load() {
@@ -26,6 +27,29 @@ export default function TasksPage() {
   }
 
   useEffect(() => { load(); }, []);
+
+  // Resume watching an already-running scan (e.g. after a page reload).
+  useEffect(() => {
+    api.getHistoryScanStatus().then(s => { if (s.running) { setScanStatus(s); pollScanStatus(); } }).catch(() => {});
+  }, []);
+
+  function pollScanStatus() {
+    const interval = setInterval(async () => {
+      try {
+        const s = await api.getHistoryScanStatus();
+        setScanStatus(s);
+        if (!s.running) {
+          clearInterval(interval);
+          if (s.error) toast(`הסריקה נכשלה: ${s.error}`, 'error');
+          else toast(`נסרקו ${s.chatsScanned}/${s.chatsAttempted} צ'אטים · ${s.itemsAdded} משימות חדשות נמצאו`, 'success');
+          load();
+        }
+      } catch (err) {
+        clearInterval(interval);
+        toast(err.message, 'error');
+      }
+    }, 1500);
+  }
 
   const chatName = (chatId) => chats.find(c => c.chat_id === chatId)?.name || chatId;
 
@@ -51,12 +75,11 @@ export default function TasksPage() {
   }
 
   async function handleHistoryScan() {
-    setScanning(true);
     try {
-      const result = await api.runHistoryScan(scanDays);
-      toast(`נסרקו ${result.chatsScanned} צ'אטים (${result.messagesScanned} הודעות) · ${result.itemsAdded} משימות חדשות נמצאו`, 'success');
-      await load();
-    } catch (err) { toast(err.message, 'error'); } finally { setScanning(false); }
+      const s = await api.startHistoryScan(scanDays, scanLimit || null);
+      setScanStatus(s);
+      pollScanStatus();
+    } catch (err) { toast(err.message, 'error'); }
   }
 
   async function toggleComplete(item) {
@@ -94,8 +117,17 @@ export default function TasksPage() {
               <option value={14}>שבועיים</option>
               <option value={30}>חודש</option>
             </select>
-            <button className="btn" onClick={handleHistoryScan} disabled={scanning}>
-              {scanning ? 'סורק...' : '🔍 נתח היסטוריה'}
+            <input
+              className="form-input"
+              type="number"
+              min={0}
+              style={{ width: 90, padding: '9px 10px' }}
+              value={scanLimit}
+              onChange={(e) => setScanLimit(Number(e.target.value))}
+              title="מגבלת צ'אטים לבדיקה (0 = ללא הגבלה, כל 1,821 הצ'אטים)"
+            />
+            <button className="btn" onClick={handleHistoryScan} disabled={scanStatus?.running}>
+              {scanStatus?.running ? 'סורק...' : '🔍 נתח היסטוריה'}
             </button>
           </div>
           <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.88rem', fontWeight: 600 }}>
@@ -108,10 +140,26 @@ export default function TasksPage() {
         </div>
       </div>
 
-      <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: -18, marginBottom: 18 }}>
+      <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: -18, marginBottom: 10 }}>
         כשההאזנה פעילה, כל הודעה נכנסת (בקבוצות ובצ'אטים אישיים) נבדקת אוטומטית ברקע — כשהתור ריק היא נבדקת כל כמה שניות, וכשמצטברות כמה הודעות ביחד היא מרוקנת אותן ברצף מהיר. "סנכרן עכשיו" מריק את התור מיידית בלי לחכות, כולל כל מה שהצטבר מאז הפעם האחרונה (Green API שומר את התור גם כשההאזנה כבויה, לזמן מוגבל).
-        "נתח היסטוריה" הוא נפרד — הוא סורק את כל מי שפנה אליך (קבוצות וגם צ'אטים אישיים) בטווח הימים שבחרת, גם אם ההאזנה החיה הייתה כבויה כל הזמן הזה. ייתכנו משימות כפולות אם הטווחים חופפים — פשוט תסמן אותן כבוצעו.
+        "נתח היסטוריה" הוא נפרד — סורק את אנשי הקשר בעלי שם שמור והקבוצות שלך (1,821 בסה"כ) בטווח הימים שנבחר; המספר בשדה הקטן מגביל כמה מהם ייבדקו בריצה הזו (0 = כולם). ייתכנו משימות כפולות אם הטווחים חופפים עם ההאזנה החיה — פשוט תסמן אותן כבוצעו.
       </p>
+
+      {scanStatus && (scanStatus.running || scanStatus.finishedAt) && (
+        <div className="glass-card" style={{ marginBottom: 18, padding: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: 8 }}>
+            <span>{scanStatus.running ? '🔍 סורק היסטוריה...' : scanStatus.error ? '❌ הסריקה נכשלה' : '✅ הסריקה הושלמה'}</span>
+            <span>{scanStatus.chatsScanned}/{scanStatus.chatsAttempted} צ'אטים · {scanStatus.itemsAdded} משימות נמצאו</span>
+          </div>
+          <div style={{ background: 'var(--bg-tertiary)', borderRadius: 6, height: 8, overflow: 'hidden' }}>
+            <div style={{
+              width: `${scanStatus.chatsAttempted ? Math.round((scanStatus.chatsScanned / scanStatus.chatsAttempted) * 100) : 0}%`,
+              background: scanStatus.error ? 'var(--accent-danger)' : 'var(--accent-primary)',
+              height: '100%', transition: 'width 0.3s ease'
+            }} />
+          </div>
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
         {[['active', 'פעילות'], ['saved', 'שמורות להמשך'], ['completed', 'בוצעו']].map(([key, label]) => (
@@ -136,6 +184,7 @@ export default function TasksPage() {
                 <tr>
                   <SortTh label="#" sortKey="id" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
                   <SortTh label="משימה" sortKey="task" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
+                  <SortTh label="קטגוריה" sortKey="category" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
                   <SortTh label="קבוצה / מקור" sortKey="chat_id" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
                   <SortTh label="אחראי" sortKey="assignee" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
                   <SortTh label="תאריך יעד" sortKey="deadline" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
@@ -149,6 +198,7 @@ export default function TasksPage() {
                   <tr key={item.id}>
                     <td className="row-id">#{item.id}</td>
                     <td style={item.completed ? { textDecoration: 'line-through', color: 'var(--text-muted)' } : {}}>{item.task}</td>
+                    <td>{item.category ? <span className="badge badge-info">{item.category}</span> : '—'}</td>
                     <td>{chatName(item.chat_id)}</td>
                     <td>{item.assignee || '—'}</td>
                     <td>{item.deadline || '—'}</td>
