@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 Set-Location -Path $PSScriptRoot
@@ -30,7 +30,7 @@ try {
     Invoke-Git clone --quiet "https://github.com/$PublicRepo.git" $WorkDir
 
     Write-Step "מכין את קבצי הפרויקט (רק מה שנמצא ב-git, בלי data/ או node_modules)..."
-    Invoke-Git archive --format=zip -o $ArchiveZip HEAD
+    Invoke-Git archive --format=zip "--output=$ArchiveZip" HEAD
 
     # Wipe everything except .git so deletions in the source repo propagate too.
     Get-ChildItem $WorkDir -Force | Where-Object { $_.Name -ne '.git' } | Remove-Item -Recurse -Force
