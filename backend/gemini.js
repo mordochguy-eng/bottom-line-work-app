@@ -135,6 +135,22 @@ export async function scanChatForActions(apiKey, { chatName, isGroup, messages }
   return callGemini(apiKey, 'gemini-3.5-flash', systemInstruction, prompt, true);
 }
 
+/**
+ * Recurring-motif analysis: given a pile of incoming questions/messages
+ * from one segment (e.g. "unsaved individuals"), finds repeated themes and
+ * proposes ready-to-use FAQ entries for the auto-reply feature. One call
+ * per segment at the end of a history scan, not per chat.
+ */
+export async function identifyRecurringMotifs(apiKey, { segmentLabel, questions }) {
+  const systemInstruction = `אתה עוזר שמנתח אוסף הודעות/שאלות שהתקבלו בוואטסאפ מקבוצת שולחים בשם "${segmentLabel}", ומזהה מוטיבים ושאלות שחוזרות על עצמן מספר פעמים.
+עבור כל מוטיב חוזר, נסח שאלה נפוצה מייצגת (בעברית, בגוף שני - איך אדם היה שואל אותה) ותשובה קצרה, ברורה ומקצועית שמתאימה לענות בה באופן כללי לכל מי ששואל שאלה דומה.
+כלול רק מוטיבים שחזרו בפועל אצל כמה שולחים שונים או בכמה הזדמנויות - אל תמציא שאלה על סמך הודעה בודדת.`;
+  const schema = `{ "faqSuggestions": [ { "question": "השאלה הנפוצה בעברית", "answer": "תשובה מוצעת בעברית" } ] }`;
+  const list = questions.map((q, i) => `${i + 1}. ${q}`).join('\n');
+  const prompt = `רשימת הודעות/שאלות שהתקבלו מ"${segmentLabel}":\n${list}\n\nהחזר אך ורק אובייקט JSON התואם לסכימה: ${schema}\nאם אין מוטיב חוזר משמעותי, החזר faqSuggestions: []`;
+  return callGemini(apiKey, 'gemini-3.5-flash', systemInstruction, prompt, true);
+}
+
 /** Draft an auto-reply suggestion for an incoming 1:1 message. Never sent directly — always goes to the approval queue. */
 export async function draftAutoReply(apiKey, { senderName, incomingMessage, faqs, isKnownContact }) {
   const faqText = (faqs || []).map(f => `ש: ${f.question}\nת: ${f.answer}`).join('\n\n') || 'אין שאלות נפוצות מוגדרות.';

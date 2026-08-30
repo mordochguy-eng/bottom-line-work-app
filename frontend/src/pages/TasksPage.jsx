@@ -12,7 +12,7 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [scanDays, setScanDays] = useState(7);
-  const [scanLimit, setScanLimit] = useState(50);
+  const [scanLimit, setScanLimit] = useState(0);
   const [scanStatus, setScanStatus] = useState(null);
   const toast = useToast();
 
@@ -41,7 +41,7 @@ export default function TasksPage() {
         if (!s.running) {
           clearInterval(interval);
           if (s.error) toast(`הסריקה נכשלה: ${s.error}`, 'error');
-          else toast(`נסרקו ${s.chatsScanned}/${s.chatsAttempted} צ'אטים · ${s.itemsAdded} משימות חדשות נמצאו`, 'success');
+          else toast(`נסרקו ${s.chatsScanned}/${s.chatsAttempted} צ'אטים · ${s.itemsAdded} משימות חדשות · ${s.faqSuggestionsAdded} הצעות שאלה נפוצה`, 'success');
           load();
         }
       } catch (err) {
@@ -124,7 +124,7 @@ export default function TasksPage() {
               style={{ width: 90, padding: '9px 10px' }}
               value={scanLimit}
               onChange={(e) => setScanLimit(Number(e.target.value))}
-              title="מגבלת צ'אטים לבדיקה (0 = ללא הגבלה, כל 1,821 הצ'אטים)"
+              title="מגבלת צ'אטים לבדיקה (0 = ללא הגבלה, כל הצ'אטים בשני הפלחים)"
             />
             <button className="btn" onClick={handleHistoryScan} disabled={scanStatus?.running}>
               {scanStatus?.running ? 'סורק...' : '🔍 נתח היסטוריה'}
@@ -142,14 +142,14 @@ export default function TasksPage() {
 
       <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: -18, marginBottom: 10 }}>
         כשההאזנה פעילה, כל הודעה נכנסת (בקבוצות ובצ'אטים אישיים) נבדקת אוטומטית ברקע — כשהתור ריק היא נבדקת כל כמה שניות, וכשמצטברות כמה הודעות ביחד היא מרוקנת אותן ברצף מהיר. "סנכרן עכשיו" מריק את התור מיידית בלי לחכות, כולל כל מה שהצטבר מאז הפעם האחרונה (Green API שומר את התור גם כשההאזנה כבויה, לזמן מוגבל).
-        "נתח היסטוריה" הוא נפרד — סורק את אנשי הקשר בעלי שם שמור והקבוצות שלך (1,821 בסה"כ) בטווח הימים שנבחר; המספר בשדה הקטן מגביל כמה מהם ייבדקו בריצה הזו (0 = כולם). ייתכנו משימות כפולות אם הטווחים חופפים עם ההאזנה החיה — פשוט תסמן אותן כבוצעו.
+        "נתח היסטוריה" סורק את כל הצ'אטים בשני פלחים — אנשי קשר שמורים+קבוצות, וצ'אטים אישיים לא שמורים — ומחפש בכל פלח שאלות שחוזרות על עצמן, כדי להציע שאלות נפוצות (FAQ) ללשונית "תור אישור תגובות". משימות כפולות (מהאזנה חיה או מריצות קודמות) מדולגות אוטומטית.
       </p>
 
       {scanStatus && (scanStatus.running || scanStatus.finishedAt) && (
         <div className="glass-card" style={{ marginBottom: 18, padding: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: 8 }}>
             <span>{scanStatus.running ? '🔍 סורק היסטוריה...' : scanStatus.error ? '❌ הסריקה נכשלה' : '✅ הסריקה הושלמה'}</span>
-            <span>{scanStatus.chatsScanned}/{scanStatus.chatsAttempted} צ'אטים · {scanStatus.itemsAdded} משימות נמצאו</span>
+            <span>{scanStatus.chatsScanned}/{scanStatus.chatsAttempted} צ'אטים · {scanStatus.itemsAdded} משימות · {scanStatus.faqSuggestionsAdded || 0} הצעות FAQ</span>
           </div>
           <div style={{ background: 'var(--bg-tertiary)', borderRadius: 6, height: 8, overflow: 'hidden' }}>
             <div style={{
