@@ -117,6 +117,23 @@ export function formatSummaryForWhatsApp(chatName, summaryData) {
   return text;
 }
 
+/**
+ * Historical scan: reads a whole chat's recent transcript in one call and
+ * pulls out every message that needed action from the owner. One call per
+ * chat (not per message) — much cheaper than analyzing each message
+ * individually when scanning days of backlog.
+ */
+export async function scanChatForActions(apiKey, { chatName, isGroup, messages }) {
+  const systemInstruction = `אתה עוזר שסורק שיחת וואטסאפ ${isGroup ? 'קבוצתית' : 'אישית'} ומזהה אילו הודעות ספציפיות דרשו פעולה מבעל החשבון (מענה, ביצוע בקשה, מתן הצעת מחיר, בדיקת זכאות, עמידה בדדליין וכו').
+התעלם משיחת חולין ומהודעות שכבר טופלו במהלך השיחה עצמה (למשל אם מישהו אחר בשיחה כבר ענה). אם אינך בטוח, אל תכלול - עדיף לפספס מקרה גבולי מאשר להציף ברשימת המשימות.`;
+  const schema = `{ "items": [ { "task": "תיאור קצר וברור של מה שצריך לעשות", "sender": "שם השולח של ההודעה הרלוונטית", "deadline": "תאריך יעד בפורמט YYYY-MM-DD אם צוין, אחרת null" } ] }`;
+  const transcript = messages
+    .map(m => `[${new Date(m.timestamp * 1000).toLocaleString('he-IL')}] ${m.senderName}: ${m.text}`)
+    .join('\n');
+  const prompt = `שיחה עם/בקבוצה "${chatName}":\n${transcript}\n\nתאריך היום: ${new Date().toISOString().slice(0, 10)}.\nהחזר אך ורק אובייקט JSON התואם לסכימה: ${schema}\nאם אין הודעות שדורשות פעולה, החזר items: []`;
+  return callGemini(apiKey, 'gemini-3.5-flash', systemInstruction, prompt, true);
+}
+
 /** Draft an auto-reply suggestion for an incoming 1:1 message. Never sent directly — always goes to the approval queue. */
 export async function draftAutoReply(apiKey, { senderName, incomingMessage, faqs, isKnownContact }) {
   const faqText = (faqs || []).map(f => `ש: ${f.question}\nת: ${f.answer}`).join('\n\n') || 'אין שאלות נפוצות מוגדרות.';

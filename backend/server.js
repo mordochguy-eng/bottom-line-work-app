@@ -8,6 +8,7 @@ import * as gemini from './gemini.js';
 import * as scheduler from './scheduler.js';
 import * as sync from './sync.js';
 import { startMessageListener, drainQueueNow } from './messageListener.js';
+import { runHistoryScan } from './historyScan.js';
 
 const app = express();
 app.use(cors());
@@ -212,16 +213,41 @@ app.post('/api/approval-queue/:id/reject', async (req, res) => {
   } catch (error) { handleError(res, error); }
 });
 
+// receiveNotification only ever returns anything if this instance setting is
+// on — it's off by default on a fresh Green API instance, so both toggles
+// below fix it up front instead of silently listening to an empty queue.
+async function ensureListenerReady(settings) {
+  if (!settings.apiUrl || !settings.idInstance || !settings.apiTokenInstance) return;
+  await greenApi.ensureIncomingWebhookEnabled(settings.apiUrl, settings.idInstance, settings.apiTokenInstance);
+}
+
 app.post('/api/auto-reply/toggle', async (req, res) => {
-  try { res.json(await db.saveSettings({ autoReplyEnabled: !!req.body.enabled })); } catch (error) { handleError(res, error); }
+  try {
+    const enabled = !!req.body.enabled;
+    const updated = await db.saveSettings({ autoReplyEnabled: enabled });
+    if (enabled) await ensureListenerReady(updated);
+    res.json(updated);
+  } catch (error) { handleError(res, error); }
 });
 
 app.post('/api/live-insights/toggle', async (req, res) => {
-  try { res.json(await db.saveSettings({ liveInsightsEnabled: !!req.body.enabled })); } catch (error) { handleError(res, error); }
+  try {
+    const enabled = !!req.body.enabled;
+    const updated = await db.saveSettings({ liveInsightsEnabled: enabled });
+    if (enabled) await ensureListenerReady(updated);
+    res.json(updated);
+  } catch (error) { handleError(res, error); }
 });
 
 app.post('/api/message-listener/sync-now', async (req, res) => {
   try { res.json(await drainQueueNow()); } catch (error) { handleError(res, error); }
+});
+
+app.post('/api/history-scan', async (req, res) => {
+  try {
+    const days = Number(req.body.days) || 7;
+    res.json(await runHistoryScan(days));
+  } catch (error) { handleError(res, error); }
 });
 
 // ---------- Sync ----------

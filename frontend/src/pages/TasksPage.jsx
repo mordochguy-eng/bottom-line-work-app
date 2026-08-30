@@ -11,6 +11,8 @@ export default function TasksPage() {
   const [filter, setFilter] = useState('active'); // active | saved | completed
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [scanDays, setScanDays] = useState(7);
+  const [scanning, setScanning] = useState(false);
   const toast = useToast();
 
   async function load() {
@@ -48,6 +50,15 @@ export default function TasksPage() {
     } catch (err) { toast(err.message, 'error'); } finally { setSyncing(false); }
   }
 
+  async function handleHistoryScan() {
+    setScanning(true);
+    try {
+      const result = await api.runHistoryScan(scanDays);
+      toast(`נסרקו ${result.chatsScanned} צ'אטים (${result.messagesScanned} הודעות) · ${result.itemsAdded} משימות חדשות נמצאו`, 'success');
+      await load();
+    } catch (err) { toast(err.message, 'error'); } finally { setScanning(false); }
+  }
+
   async function toggleComplete(item) {
     try { await api.toggleActionItem(item.id, !item.completed); await load(); } catch (err) { toast(err.message, 'error'); }
   }
@@ -71,10 +82,22 @@ export default function TasksPage() {
           <h2>✅ משימות</h2>
           <p>משימות מסיכומי הקבוצות, ומהאזנה חיה לכל הודעה נכנסת</p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
           <button className="btn" onClick={handleSyncNow} disabled={syncing}>
             {syncing ? 'מסנכרן...' : '🔄 סנכרן עכשיו'}
           </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <select className="form-select" style={{ padding: '9px 10px', width: 'auto' }} value={scanDays} onChange={(e) => setScanDays(Number(e.target.value))}>
+              <option value={1}>יום אחרון</option>
+              <option value={3}>3 ימים</option>
+              <option value={7}>שבוע</option>
+              <option value={14}>שבועיים</option>
+              <option value={30}>חודש</option>
+            </select>
+            <button className="btn" onClick={handleHistoryScan} disabled={scanning}>
+              {scanning ? 'סורק...' : '🔍 נתח היסטוריה'}
+            </button>
+          </div>
           <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.88rem', fontWeight: 600 }}>
             🎧 האזנה חיה {settings.liveInsightsEnabled ? 'פעילה' : 'כבויה'}
             <label className="switch">
@@ -87,6 +110,7 @@ export default function TasksPage() {
 
       <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: -18, marginBottom: 18 }}>
         כשההאזנה פעילה, כל הודעה נכנסת (בקבוצות ובצ'אטים אישיים) נבדקת אוטומטית ברקע — כשהתור ריק היא נבדקת כל כמה שניות, וכשמצטברות כמה הודעות ביחד היא מרוקנת אותן ברצף מהיר. "סנכרן עכשיו" מריק את התור מיידית בלי לחכות, כולל כל מה שהצטבר מאז הפעם האחרונה (Green API שומר את התור גם כשההאזנה כבויה, לזמן מוגבל).
+        "נתח היסטוריה" הוא נפרד — הוא סורק את כל מי שפנה אליך (קבוצות וגם צ'אטים אישיים) בטווח הימים שבחרת, גם אם ההאזנה החיה הייתה כבויה כל הזמן הזה. ייתכנו משימות כפולות אם הטווחים חופפים — פשוט תסמן אותן כבוצעו.
       </p>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>

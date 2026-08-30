@@ -16,6 +16,31 @@ export async function checkInstanceStatus(apiUrl, idInstance, apiTokenInstance) 
   }
 }
 
+export async function getInstanceSettings(apiUrl, idInstance, apiTokenInstance) {
+  const url = `${getBaseUrl(apiUrl, idInstance)}/getSettings/${apiTokenInstance}`;
+  const response = await axios.get(url, { timeout: 15000 });
+  return response.data;
+}
+
+export async function updateInstanceSettings(apiUrl, idInstance, apiTokenInstance, settings) {
+  const url = `${getBaseUrl(apiUrl, idInstance)}/setSettings/${apiTokenInstance}`;
+  const response = await axios.post(url, settings, { timeout: 15000 });
+  return response.data;
+}
+
+// receiveNotification/lastIncomingMessages both depend on Green API actually
+// generating incoming-message events server-side, which is off by default
+// on a fresh instance (a real account was silently producing nothing until
+// this was found and turned on manually). Auto-reply and live-insights both
+// call this before relying on the notification queue, so a fresh setup
+// self-heals instead of failing the same way silently.
+export async function ensureIncomingWebhookEnabled(apiUrl, idInstance, apiTokenInstance) {
+  const current = await getInstanceSettings(apiUrl, idInstance, apiTokenInstance);
+  if (current.incomingWebhook === 'yes') return false;
+  await updateInstanceSettings(apiUrl, idInstance, apiTokenInstance, { incomingWebhook: 'yes' });
+  return true;
+}
+
 export async function fetchChats(apiUrl, idInstance, apiTokenInstance) {
   try {
     const url = `${getBaseUrl(apiUrl, idInstance)}/getChats/${apiTokenInstance}`;
@@ -33,6 +58,37 @@ export async function fetchChats(apiUrl, idInstance, apiTokenInstance) {
   } catch (error) {
     console.error('Error fetching chats:', error.message);
     throw new Error('Failed to fetch chats from Green API.');
+  }
+}
+
+// Every incoming message across the WHOLE account (all chats, groups and
+// individuals) within the last N minutes, in one call — used for the
+// historical-scan feature so it doesn't need to enumerate every chat
+// individually (which could be thousands of contacts).
+export async function fetchLastIncomingMessages(apiUrl, idInstance, apiTokenInstance, minutes = 10080) {
+  try {
+    const url = `${getBaseUrl(apiUrl, idInstance)}/lastIncomingMessages/${apiTokenInstance}`;
+    const response = await axios.get(url, { params: { minutes }, timeout: 30000 });
+    const raw = response.data || [];
+    return raw
+      .map(msg => {
+        let text = '';
+        if (msg.typeMessage === 'textMessage') text = msg.textMessage || '';
+        else if (msg.typeMessage === 'extendedTextMessage') text = msg.extendedTextMessageData?.text || msg.textMessage || '';
+        else text = msg.caption || '';
+        const chatId = msg.chatId;
+        return {
+          chatId,
+          isGroup: chatId?.endsWith('@g.us'),
+          senderName: msg.senderName || (msg.senderId ? msg.senderId.split('@')[0] : 'לא ידוע'),
+          text,
+          timestamp: msg.timestamp || 0
+        };
+      })
+      .filter(m => m.chatId && m.text);
+  } catch (error) {
+    console.error('Error fetching last incoming messages:', error.message);
+    throw new Error('Failed to fetch recent messages from Green API.');
   }
 }
 
