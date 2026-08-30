@@ -4,3 +4,4 @@ backend/.tmp-sync/
 frontend/dist/
 *.log
 .env
+.claude/scheduled_tasks.lock
