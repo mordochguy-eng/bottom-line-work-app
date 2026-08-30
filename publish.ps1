@@ -1,5 +1,6 @@
 ﻿$ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$Host.UI.RawUI.WindowTitle = "פרסום גרסה - בשורה התחתונה עבודה"
 
 Set-Location -Path $PSScriptRoot
 

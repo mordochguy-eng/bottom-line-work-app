@@ -1,3 +1,3 @@
 @echo off
-chcp 65001 >nul
-call "%~dp0_run-pm2.bat"
+cd /d "%~dp0"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\run-pm2.ps1"

@@ -34,11 +34,15 @@ bottom-line for S-On/
 │   └── src/pages/         ← דף הבית, קבוצות, משימות, תור אישור, הודעות מתוזמנות, הגדרות
 ├── scripts/
 │   ├── register-autostart-task.ps1 ← רושם Task Scheduler להפעלה אוטומטית (כמו bottom-line האישי)
-│   └── start-and-notify.ps1        ← מריץ pm2 resurrect + התרעת Windows, מופעל ע"י ה-task
+│   ├── start-and-notify.ps1        ← מריץ pm2 resurrect + התרעת Windows, מופעל ע"י ה-task
+│   ├── export-data.ps1             ← מייצא את backend/data/ ל-ZIP בשולחן העבודה
+│   └── import-data.ps1             ← מייבא ZIP כזה חזרה ל-backend/data/, עם גיבוי של הקיים
 ├── sync-config.json       ← {"repo": "owner/name", "branch": "main"} — עולה לגיט
 ├── ecosystem.config.cjs   ← הגדרות PM2 (כמו bottom-line האישי)
 ├── start-pm2.bat
-└── Register-AutoStart.bat ← חד-פעמי: רושם את ההפעלה האוטומטית
+├── Register-AutoStart.bat ← חד-פעמי: רושם את ההפעלה האוטומטית
+├── Export-Data.bat        ← מייצא נתונים אישיים (הגדרות/משימות/הודעות) להעברה למחשב אחר
+└── Import-Data.bat        ← גרור עליו ZIP שיוצא מ-Export-Data.bat כדי לייבא
 ```
 
 **פורטים** (שונים מה-bottom-line האישי כדי לרוץ במקביל על אותו מחשב): backend `5101`, frontend `5174`.
@@ -81,6 +85,11 @@ pm2 save
 5. **חד-פעמי, כדי שהאפליקציה תעלה אוטומטית באתחול/כניסה/התעוררות משינה** (בדיוק כמו ה-bottom-line האישי): לחיצה כפולה על **`Register-AutoStart.bat`**. לא צריך הרשאת מנהל. רושם משימת Task Scheduler בשם `BottomLineWork-AutoStart` שמריצה `pm2 resurrect` ומציגה התרעת Windows עם התוצאה.
 
 מכאן והלאה — כפתור **"סנכרן גרסה"** בהגדרות מספיק לכל עדכון, בלי לחזור על השלבים האלו.
+
+**העברת נתונים קיימים למחשב החדש (אופציונלי):** `backend/data/` — ההגדרות שלך (מפתחות API), המשימות, ההודעות המתוזמנות וההיסטוריה — לא מסונכרן בשום מנגנון (לא ב-git, לא בכפתור הסנכרון) כי הוא אישי לכל מחשב. אם אתה רוצה שהמחשב החדש יתחיל עם אותם נתונים במקום ריק:
+1. במחשב המקורי: לחיצה כפולה על **`Export-Data.bat`** — יוצר קובץ ZIP בשולחן העבודה
+2. העתק את הקובץ למחשב החדש (USB / ענן / מייל)
+3. שם: גרור את קובץ ה-ZIP ישירות על **`Import-Data.bat`** (עוצר את השרתים, מגבה נתונים קיימים אם יש כאלה, מייבא, ומפעיל מחדש)
 
 **חלופה למחשב שלך, שבו כבר יש git מחובר:**
 ```bash
