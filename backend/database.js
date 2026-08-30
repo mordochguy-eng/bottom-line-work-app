@@ -58,6 +58,19 @@ function wordOverlapRatio(a, b) {
 }
 const DUPLICATE_THRESHOLD = 0.35;
 
+// Grounds an extracted task's date in a real message timestamp instead of
+// trusting Gemini's own date math over a long transcript — which drifts
+// toward the most recent message when the model is unsure which one
+// actually generated the task.
+export function findSourceMessage(taskText, messages) {
+  let best = null, bestScore = 0;
+  for (const m of messages) {
+    const score = wordOverlapRatio(taskText, m.body);
+    if (score > bestScore) { bestScore = score; best = m; }
+  }
+  return bestScore >= DUPLICATE_THRESHOLD ? best : null;
+}
+
 // ---------- Settings ----------
 export async function getSettings() {
   return readJson('settings.json', {});
@@ -196,6 +209,9 @@ export async function insertActionItems(chatId, items) {
 export async function getActionItems() {
   return readJson('action_items.json', []);
 }
+export async function setActionItems(items) {
+  await writeJson('action_items.json', items);
+}
 export async function setActionItemCompleted(id, completed) {
   const items = await getActionItems();
   const idx = items.findIndex(i => i.id === id);
@@ -210,6 +226,14 @@ export async function setActionItemSavedForLater(id, saved, snoozedUntil = null)
   if (idx === -1) throw new Error('Action item not found');
   items[idx].saved_for_later = saved;
   items[idx].snoozed_until = saved ? snoozedUntil : null;
+  await writeJson('action_items.json', items);
+  return items[idx];
+}
+export async function setActionItemDeadline(id, deadline) {
+  const items = await getActionItems();
+  const idx = items.findIndex(i => i.id === id);
+  if (idx === -1) throw new Error('Action item not found');
+  items[idx].deadline = deadline || null;
   await writeJson('action_items.json', items);
   return items[idx];
 }

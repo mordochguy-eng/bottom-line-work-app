@@ -194,6 +194,16 @@ export async function getContacts(apiUrl, idInstance, apiTokenInstance) {
   return response.data || [];
 }
 
+// Individuals only, named for display — used by the scheduled-message
+// recipient picker so it can search real WhatsApp contacts, not just the
+// tracked-groups list.
+export async function getIndividualContacts(apiUrl, idInstance, apiTokenInstance) {
+  const raw = await getContacts(apiUrl, idInstance, apiTokenInstance);
+  return raw
+    .filter(c => c.type === 'user' && c.id?.endsWith('@c.us'))
+    .map(c => ({ chat_id: c.id, name: c.contactName?.trim() || c.name?.trim() || c.id }));
+}
+
 // ---------- Notification queue polling (used for the auto-reply feature) ----------
 // This is Green API's pull-based mechanism for real-time incoming messages:
 // no public URL is needed (unlike webhooks), which matters because this app

@@ -14,6 +14,7 @@ export const api = {
   getInstanceStatus: () => request('/instance-status'),
 
   getChats: () => request('/chats'),
+  getWhatsappContacts: () => request('/whatsapp-contacts'),
   syncChats: () => request('/chats/sync', { method: 'POST' }),
   toggleChatTracked: (chat_id, is_tracked) => request('/chats/toggle', { method: 'POST', body: JSON.stringify({ chat_id, is_tracked }) }),
   toggleChatDigest: (chat_id, include_in_digest) => request('/chats/toggle-digest', { method: 'POST', body: JSON.stringify({ chat_id, include_in_digest }) }),
@@ -27,6 +28,7 @@ export const api = {
   getActionItems: () => request('/action-items'),
   toggleActionItem: (id, completed) => request(`/action-items/${id}/toggle`, { method: 'POST', body: JSON.stringify({ completed }) }),
   toggleActionItemSaved: (id, saved_for_later, snooze_days) => request(`/action-items/${id}/toggle-save`, { method: 'POST', body: JSON.stringify({ saved_for_later, snooze_days }) }),
+  setActionItemDeadline: (id, deadline) => request(`/action-items/${id}/deadline`, { method: 'POST', body: JSON.stringify({ deadline }) }),
 
   getScheduledMessages: () => request('/scheduled-messages'),
   createScheduledMessage: (msg) => request('/scheduled-messages', { method: 'POST', body: JSON.stringify(msg) }),

@@ -102,6 +102,26 @@ export default function TasksPage() {
     try { await api.toggleActionItemSaved(item.id, false); await load(); } catch (err) { toast(err.message, 'error'); }
   }
 
+  async function handleDeadlineChange(item, value) {
+    try {
+      const updated = await api.setActionItemDeadline(item.id, value || null);
+      setItems(prev => prev.map(i => (i.id === item.id ? updated : i)));
+    } catch (err) { toast(err.message, 'error'); }
+  }
+
+  // Reuses the existing "שמור להמשך" resurface mechanism, but targets the
+  // task's own deadline instead of a fixed N-days-from-now — so it pops
+  // back up in the morning WhatsApp briefing exactly on the day you chose,
+  // ahead of the automatic 48-hour-window reminder.
+  async function handleSetReminder(item) {
+    const days = Math.ceil((new Date(`${item.deadline}T00:00:00`) - new Date().setHours(0, 0, 0, 0)) / 86400000);
+    try {
+      await api.toggleActionItemSaved(item.id, true, Math.max(days, 1));
+      toast(`🔔 תזכורת תופיע בתדרוך הבוקר ב-${item.deadline}`, 'info');
+      await load();
+    } catch (err) { toast(err.message, 'error'); }
+  }
+
   // Universal deep link (works for Office 365 / Outlook web) — no download,
   // no backend involved, just opens a pre-filled event compose screen.
   function outlookCalendarUrl(item) {
@@ -248,9 +268,25 @@ export default function TasksPage() {
                     <td>{chatName(item.chat_id)}</td>
                     <td>{item.assignee || '—'}</td>
                     <td>
-                      {item.deadline || '—'}
+                      <input
+                        type="date"
+                        dir="ltr"
+                        className="form-input"
+                        style={{ padding: '4px 6px', fontSize: '0.8rem', width: 140 }}
+                        value={item.deadline || ''}
+                        onChange={e => handleDeadlineChange(item, e.target.value)}
+                      />
                       {item.deadline && (
                         <a href={outlookCalendarUrl(item)} target="_blank" rel="noreferrer" title="הוסף ליומן Outlook" style={{ marginRight: 6 }}>📅</a>
+                      )}
+                      {item.deadline && !item.saved_for_later && new Date(`${item.deadline}T00:00:00`) > new Date().setHours(0, 0, 0, 0) && (
+                        <button
+                          type="button"
+                          className="btn-icon"
+                          title="הוסף תזכורת — תופיע בתדרוך הבוקר ביום היעד"
+                          style={{ marginRight: 6, background: 'none', border: 'none', cursor: 'pointer' }}
+                          onClick={() => handleSetReminder(item)}
+                        >🔔</button>
                       )}
                     </td>
                     <td style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{new Date(item.created_at).toLocaleString('he-IL')}</td>

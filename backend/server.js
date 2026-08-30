@@ -67,6 +67,50 @@ app.post('/api/chats/sync', async (req, res) => {
   } catch (error) { handleError(res, error); }
 });
 
+// Real WhatsApp individuals (not the small manual auto-reply contacts list
+// under /api/contacts) — used by the scheduled-message recipient search so
+// it can find people, not just tracked groups. Cached in memory: this list
+// rarely changes minute to minute, and fetching it fresh on every page load
+// hit Green API's rate limit (429) since the recipient picker calls it on
+// every visit to the scheduled-messages page.
+let whatsappContactsCache = { data: null, fetchedAt: 0 };
+const WHATSAPP_CONTACTS_TTL_MS = 15 * 60 * 1000;
+
+async function refreshWhatsappContactsCache() {
+  const settings = await db.getSettings();
+  if (!settings.idInstance) return;
+  // One retry on 429 — Green API's rate limit is often a few-second window,
+  // so a short wait usually clears it instead of surfacing to the user.
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const contacts = await greenApi.getIndividualContacts(settings.apiUrl, settings.idInstance, settings.apiTokenInstance);
+      whatsappContactsCache = { data: contacts, fetchedAt: Date.now() };
+      return whatsappContactsCache.data;
+    } catch (error) {
+      if (attempt === 2 || !error.message.includes('429')) throw error;
+      await new Promise(r => setTimeout(r, 5000));
+    }
+  }
+}
+
+app.get('/api/whatsapp-contacts', async (req, res) => {
+  try {
+    if (whatsappContactsCache.data && Date.now() - whatsappContactsCache.fetchedAt < WHATSAPP_CONTACTS_TTL_MS) {
+      return res.json(whatsappContactsCache.data);
+    }
+    res.json(await refreshWhatsappContactsCache());
+  } catch (error) {
+    // Green API rate-limited or unreachable — serve the last known-good
+    // list instead of breaking the recipient search, if we have one.
+    if (whatsappContactsCache.data) return res.json(whatsappContactsCache.data);
+    handleError(res, error);
+  }
+});
+
+// Warms the cache right when the server starts, so the first real page
+// visit doesn't race an empty cache against a still-cooling-down Green API.
+refreshWhatsappContactsCache().catch(err => console.error('[startup] whatsapp-contacts warm-up failed:', err.message));
+
 app.post('/api/chats/toggle', async (req, res) => {
   try {
     const { chat_id, is_tracked } = req.body;
@@ -111,10 +155,13 @@ app.post('/api/chats/summarize', async (req, res) => {
     // skip task extraction there instead of hoping the prompt guesses right.
     if (summaryData.actionItems?.length && chat.profile_type !== 'info') {
       const lastTimestamp = allMessages[allMessages.length - 1]?.timestamp;
-      await db.insertActionItems(chat_id, summaryData.actionItems.map(it => ({
-        ...it,
-        created_at: scheduler.resolveMessageCreatedAt(it.messageDate, lastTimestamp)
-      })));
+      await db.insertActionItems(chat_id, summaryData.actionItems.map(it => {
+        const sourceMessage = db.findSourceMessage(it.task, allMessages);
+        const created_at = sourceMessage
+          ? new Date(sourceMessage.timestamp * 1000).toISOString()
+          : scheduler.resolveMessageCreatedAt(it.messageDate, lastTimestamp);
+        return { ...it, created_at };
+      }));
     }
 
     await db.updateChat(chat_id, { last_summary_at: new Date().toISOString() });
@@ -178,6 +225,10 @@ app.get('/api/action-items', async (req, res) => {
 
 app.post('/api/action-items/:id/toggle', async (req, res) => {
   try { res.json(await db.setActionItemCompleted(Number(req.params.id), req.body.completed)); } catch (error) { handleError(res, error); }
+});
+
+app.post('/api/action-items/:id/deadline', async (req, res) => {
+  try { res.json(await db.setActionItemDeadline(Number(req.params.id), req.body.deadline)); } catch (error) { handleError(res, error); }
 });
 
 app.post('/api/action-items/:id/toggle-save', async (req, res) => {
@@ -450,10 +501,13 @@ cron.schedule('* * * * *', async () => {
           await db.insertSummary(chat.chat_id, summaryData);
           if (summaryData.actionItems?.length && chat.profile_type !== 'info') {
             const lastTimestamp = allMessages[allMessages.length - 1]?.timestamp;
-            await db.insertActionItems(chat.chat_id, summaryData.actionItems.map(it => ({
-              ...it,
-              created_at: scheduler.resolveMessageCreatedAt(it.messageDate, lastTimestamp)
-            })));
+            await db.insertActionItems(chat.chat_id, summaryData.actionItems.map(it => {
+              const sourceMessage = db.findSourceMessage(it.task, allMessages);
+              const created_at = sourceMessage
+                ? new Date(sourceMessage.timestamp * 1000).toISOString()
+                : scheduler.resolveMessageCreatedAt(it.messageDate, lastTimestamp);
+              return { ...it, created_at };
+            }));
           }
           await db.updateChat(chat.chat_id, { last_summary_at: new Date().toISOString() });
           await db.clearMessagesForChat(chat.chat_id);
