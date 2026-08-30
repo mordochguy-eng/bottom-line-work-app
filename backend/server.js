@@ -477,6 +477,14 @@ cron.schedule('* * * * *', async () => {
     const now = new Date();
     for (const msg of all) {
       if (!scheduler.isDue(msg, now)) continue;
+      // Checked BEFORE attempting to send (matches the personal dashboard):
+      // if the computer/app was down and this became stale, don't send it
+      // late — mark it failed instead of surprising someone with a
+      // "good morning" message that goes out at 2pm.
+      if (scheduler.isExpired(msg, now)) {
+        await db.updateScheduledMessage(msg.id, { status: 'failed', attempts: (msg.attempts || 0) + 1 });
+        continue;
+      }
       try {
         await dispatchScheduledMessage(settings, msg);
         const nextRepeat = scheduler.getNextRepeatAt(msg);
