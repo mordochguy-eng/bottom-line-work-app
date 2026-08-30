@@ -7,7 +7,7 @@ import * as greenApi from './greenApi.js';
 import * as gemini from './gemini.js';
 import * as scheduler from './scheduler.js';
 import * as sync from './sync.js';
-import { startMessageListener } from './messageListener.js';
+import { startMessageListener, drainQueueNow } from './messageListener.js';
 
 const app = express();
 app.use(cors());
@@ -220,6 +220,10 @@ app.post('/api/live-insights/toggle', async (req, res) => {
   try { res.json(await db.saveSettings({ liveInsightsEnabled: !!req.body.enabled })); } catch (error) { handleError(res, error); }
 });
 
+app.post('/api/message-listener/sync-now', async (req, res) => {
+  try { res.json(await drainQueueNow()); } catch (error) { handleError(res, error); }
+});
+
 // ---------- Sync ----------
 app.get('/api/sync/config', async (req, res) => {
   try { res.json(await sync.getSyncConfig()); } catch (error) { handleError(res, error); }
@@ -323,6 +327,32 @@ cron.schedule('* * * * *', async () => {
   }
 });
 
+// Sends one scheduled message via the Green API call that matches its type.
+async function dispatchScheduledMessage(settings, msg) {
+  const { apiUrl, idInstance, apiTokenInstance } = settings;
+  switch (msg.type) {
+    case 'media':
+      return greenApi.sendFile(apiUrl, idInstance, apiTokenInstance, msg.chat_id, {
+        url: msg.media_url, filename: msg.media_filename || 'file', caption: msg.content || ''
+      });
+    case 'location':
+      return greenApi.sendLocation(apiUrl, idInstance, apiTokenInstance, msg.chat_id, {
+        lat: msg.location?.lat, lng: msg.location?.lng, name: msg.location?.name, address: msg.location?.address
+      });
+    case 'poll':
+      return greenApi.sendPoll(apiUrl, idInstance, apiTokenInstance, msg.chat_id, {
+        question: msg.content, options: msg.poll_options || [], multipleAnswers: msg.poll_multiple
+      });
+    case 'contact':
+      return greenApi.sendContact(apiUrl, idInstance, apiTokenInstance, msg.chat_id, {
+        phone: msg.contact?.phone, firstName: msg.contact?.firstName, lastName: msg.contact?.lastName
+      });
+    case 'text':
+    default:
+      return greenApi.sendWhatsAppMessage(apiUrl, idInstance, apiTokenInstance, msg.chat_id, msg.content);
+  }
+}
+
 // ---------- Cron: scheduled-messages dispatcher (checked every minute) ----------
 cron.schedule('* * * * *', async () => {
   try {
@@ -333,7 +363,7 @@ cron.schedule('* * * * *', async () => {
     for (const msg of all) {
       if (!scheduler.isDue(msg, now)) continue;
       try {
-        await greenApi.sendWhatsAppMessage(settings.apiUrl, settings.idInstance, settings.apiTokenInstance, msg.chat_id, msg.content);
+        await dispatchScheduledMessage(settings, msg);
         const nextRepeat = scheduler.getNextRepeatAt(msg);
         if (nextRepeat) {
           await db.updateScheduledMessage(msg.id, { scheduled_at: nextRepeat, attempts: 0, retry_after: null, status: 'pending' });
