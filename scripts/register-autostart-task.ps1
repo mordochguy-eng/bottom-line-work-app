@@ -1,6 +1,9 @@
-﻿$taskName = "BottomLineWork-AutoStart"
+﻿$Host.UI.RawUI.WindowTitle = "רישום הפעלה אוטומטית - בשורה התחתונה עבודה"
 
-$action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "C:\AI Software\bottom-line for S-On\scripts\start-and-notify.ps1"'
+$taskName = "BottomLineWork-AutoStart"
+$notifyScript = Join-Path $PSScriptRoot "start-and-notify.ps1"
+
+$action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$notifyScript`""
 
 $trigStartup = New-ScheduledTaskTrigger -AtStartup
 $trigLogon = New-ScheduledTaskTrigger -AtLogOn
@@ -16,6 +19,8 @@ $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoi
 
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger @($trigStartup, $trigLogon, $trigWake) -Principal $principal -Settings $settings -Force -Description "Resurrects PM2 (בשורה התחתונה - עבודה, backend+frontend) on boot, logon and wake-from-sleep, with a Windows toast on result." | Out-Null
 
-Write-Host "Task registered."
+Write-Host "`nהמשימה נרשמה בהצלחה." -ForegroundColor Green
 Get-ScheduledTask -TaskName $taskName | Select-Object TaskName, State | Format-List
-Start-Sleep -Seconds 5
+Write-Host "מעכשיו האפליקציה תעלה אוטומטית באתחול, בכניסה, ובהתעוררות ממצב שינה." -ForegroundColor Gray
+Write-Host "`nלחץ מקש כלשהו כדי לסגור את החלון..." -ForegroundColor Gray
+$null = [System.Console]::ReadKey($true)
