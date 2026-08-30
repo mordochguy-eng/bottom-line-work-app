@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useToast } from '../components/Toast.jsx';
+import SortTh from '../components/SortTh.jsx';
+import { useSort } from '../hooks/useSort.js';
 
 export default function GroupsPage() {
   const [chats, setChats] = useState([]);
@@ -48,6 +50,8 @@ export default function GroupsPage() {
     } catch (err) { toast(err.message, 'error'); } finally { setSummarizingId(null); }
   }
 
+  const { sorted, sortKey, sortDir, requestSort } = useSort(chats, 'name', 'asc');
+
   return (
     <>
       <div className="page-header">
@@ -72,15 +76,15 @@ export default function GroupsPage() {
           <table className="data-table">
             <thead>
               <tr>
-                <th>שם</th>
-                <th>במעקב</th>
-                <th>כלול בסיכום היומי</th>
-                <th>סיכום אחרון</th>
+                <SortTh label="שם" sortKey="name" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
+                <SortTh label="במעקב" sortKey="is_tracked" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
+                <SortTh label="כלול בסיכום היומי" sortKey="include_in_digest" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
+                <SortTh label="סיכום אחרון" sortKey="last_summary_at" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {chats.map(chat => (
+              {sorted.map(chat => (
                 <tr key={chat.chat_id}>
                   <td>{chat.name}</td>
                   <td>

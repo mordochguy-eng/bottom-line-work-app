@@ -44,6 +44,7 @@ export const api = {
   rejectQueueItem: (id) => request(`/approval-queue/${id}/reject`, { method: 'POST' }),
   toggleAutoReply: (enabled) => request('/auto-reply/toggle', { method: 'POST', body: JSON.stringify({ enabled }) }),
   toggleLiveInsights: (enabled) => request('/live-insights/toggle', { method: 'POST', body: JSON.stringify({ enabled }) }),
+  syncMessagesNow: () => request('/message-listener/sync-now', { method: 'POST' }),
 
   getSyncConfig: () => request('/sync/config'),
   getSyncLog: () => request('/sync/log'),

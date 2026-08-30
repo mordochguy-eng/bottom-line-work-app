@@ -182,9 +182,15 @@ export async function saveScheduledMessage(msg) {
   const entry = {
     id: nextId(all),
     chat_id: msg.chat_id,
-    type: msg.type || 'text',
-    content: msg.content,
+    display_name: msg.display_name || null,
+    type: msg.type || 'text', // text | media | location | poll | contact
+    content: msg.content || null,           // text body / media caption / poll question
     media_url: msg.media_url || null,
+    media_filename: msg.media_filename || null,
+    location: msg.location || null,         // { lat, lng, name, address }
+    poll_options: msg.poll_options || null, // string[]
+    poll_multiple: !!msg.poll_multiple,
+    contact: msg.contact || null,           // { phone, firstName, lastName }
     scheduled_at: msg.scheduled_at,
     repeat: msg.repeat || null,
     status: 'pending',

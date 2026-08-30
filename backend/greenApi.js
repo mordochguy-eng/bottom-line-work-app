@@ -86,6 +86,24 @@ export async function sendFile(apiUrl, idInstance, apiTokenInstance, chatId, { u
   return response.data;
 }
 
+export async function sendLocation(apiUrl, idInstance, apiTokenInstance, chatId, { lat, lng, name = '', address = '' }) {
+  const endpoint = `${getBaseUrl(apiUrl, idInstance)}/sendLocation/${apiTokenInstance}`;
+  const response = await axios.post(endpoint, { chatId, latitude: lat, longitude: lng, nameLocation: name, address }, { timeout: 15000 });
+  return response.data;
+}
+
+export async function sendContact(apiUrl, idInstance, apiTokenInstance, chatId, { phone, firstName, lastName = '' }) {
+  const endpoint = `${getBaseUrl(apiUrl, idInstance)}/sendContact/${apiTokenInstance}`;
+  const response = await axios.post(endpoint, { chatId, contact: { phoneContact: phone, firstName, lastName } }, { timeout: 15000 });
+  return response.data;
+}
+
+export async function sendPoll(apiUrl, idInstance, apiTokenInstance, chatId, { question, options, multipleAnswers = false }) {
+  const endpoint = `${getBaseUrl(apiUrl, idInstance)}/sendPoll/${apiTokenInstance}`;
+  const response = await axios.post(endpoint, { chatId, message: question, options: options.map(o => ({ optionName: o })), multipleAnswers }, { timeout: 15000 });
+  return response.data;
+}
+
 export async function checkPhone(apiUrl, idInstance, apiTokenInstance, phone) {
   const endpoint = `${getBaseUrl(apiUrl, idInstance)}/checkWhatsapp/${apiTokenInstance}`;
   const response = await axios.post(endpoint, { phoneNumber: phone }, { timeout: 10000 });

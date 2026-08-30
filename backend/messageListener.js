@@ -9,6 +9,14 @@ import { draftAutoReply, analyzeMessageForAction } from './gemini.js';
 // Both read the SAME queue, so they must share one poller rather than each
 // running their own — two independent pollers would each steal half the
 // notifications from the other.
+//
+// Green API keeps the queue server-side for a limited window (about a day)
+// even while nothing is polling it, so re-enabling (or hitting "sync now")
+// catches up on whatever accumulated in the meantime — it isn't lost.
+
+const IDLE_INTERVAL_MS = 4000; // how often we check when the queue was empty last time
+const BUSY_DELAY_MS = 250;     // how fast we drain back-to-back when there's a backlog
+const DRAIN_SAFETY_CAP = 300;  // hard stop for a manual "sync now" so it can't run forever
 
 let polling = false;
 let timer = null;
@@ -32,11 +40,11 @@ function matchFaq(faqs, text) {
 }
 
 async function runAutoReply(settings, parsed) {
-  if (parsed.isGroup || !settings.autoReplyEnabled) return;
+  if (parsed.isGroup || !settings.autoReplyEnabled) return false;
   const [contacts, faqs] = await Promise.all([db.getContacts(), db.getFaqs()]);
   const known = isEligibleContact(contacts, parsed.chatId);
   const faqMatch = known ? null : matchFaq(faqs, parsed.text);
-  if (!known && !faqMatch) return;
+  if (!known && !faqMatch) return false;
 
   const draft = await draftAutoReply(settings.geminiApiKey, {
     senderName: parsed.senderName,
@@ -51,10 +59,11 @@ async function runAutoReply(settings, parsed) {
     draft_reply: draft,
     match_reason: known ? 'איש קשר מאושר' : `שאלה נפוצה: ${faqMatch.question}`
   });
+  return true;
 }
 
 async function runLiveInsights(settings, parsed) {
-  if (!settings.liveInsightsEnabled) return;
+  if (!settings.liveInsightsEnabled) return false;
   const chats = await db.getChats();
   const chatName = chats.find(c => c.chat_id === parsed.chatId)?.name || parsed.senderName;
 
@@ -70,43 +79,52 @@ async function runLiveInsights(settings, parsed) {
       assignee: parsed.senderName,
       deadline: result.deadline || null
     }]);
+    return true;
   }
+  return false;
 }
 
-export async function pollOnce() {
+/** Pops and processes exactly one notification. Returns whether one was found (i.e. whether the queue might have more). */
+async function processOneNotification() {
   const settings = await db.getSettings();
-  if (!settings.autoReplyEnabled && !settings.liveInsightsEnabled) return;
-  if (!settings.apiUrl || !settings.idInstance || !settings.apiTokenInstance) return;
+  if (!settings.autoReplyEnabled && !settings.liveInsightsEnabled) return { found: false };
+  if (!settings.apiUrl || !settings.idInstance || !settings.apiTokenInstance) return { found: false };
 
   const notification = await greenApi.receiveNotification(settings.apiUrl, settings.idInstance, settings.apiTokenInstance);
-  if (!notification) return;
+  if (!notification) return { found: false };
 
+  let replyQueued = false;
+  let insightAdded = false;
   try {
     const parsed = greenApi.parseIncomingMessage(notification);
     if (parsed && settings.geminiApiKey) {
-      await Promise.all([
-        runAutoReply(settings, parsed).catch(err => console.error('[messageListener] auto-reply error:', err.message)),
-        runLiveInsights(settings, parsed).catch(err => console.error('[messageListener] live-insights error:', err.message))
+      const [r, i] = await Promise.all([
+        runAutoReply(settings, parsed).catch(err => { console.error('[messageListener] auto-reply error:', err.message); return false; }),
+        runLiveInsights(settings, parsed).catch(err => { console.error('[messageListener] live-insights error:', err.message); return false; })
       ]);
+      replyQueued = r;
+      insightAdded = i;
     }
   } catch (err) {
     console.error('[messageListener] Error processing notification:', err.message);
   } finally {
     await greenApi.deleteNotification(settings.apiUrl, settings.idInstance, settings.apiTokenInstance, notification.receiptId);
   }
+  return { found: true, replyQueued, insightAdded };
 }
 
-export function startMessageListener(intervalMs = 4000) {
+export function startMessageListener() {
   if (polling) return;
   polling = true;
   const loop = async () => {
     if (!polling) return;
+    let found = false;
     try {
-      await pollOnce();
+      ({ found } = await processOneNotification());
     } catch (err) {
       console.error('[messageListener] poll error:', err.message);
     }
-    timer = setTimeout(loop, intervalMs);
+    timer = setTimeout(loop, found ? BUSY_DELAY_MS : IDLE_INTERVAL_MS);
   };
   loop();
 }
@@ -114,4 +132,19 @@ export function startMessageListener(intervalMs = 4000) {
 export function stopMessageListener() {
   polling = false;
   if (timer) clearTimeout(timer);
+}
+
+/** Manually drains whatever is currently queued, right now, instead of waiting for the background loop. */
+export async function drainQueueNow() {
+  let consumed = 0;
+  let repliesQueued = 0;
+  let insightsAdded = 0;
+  for (let i = 0; i < DRAIN_SAFETY_CAP; i++) {
+    const result = await processOneNotification();
+    if (!result.found) break;
+    consumed++;
+    if (result.replyQueued) repliesQueued++;
+    if (result.insightAdded) insightsAdded++;
+  }
+  return { consumed, repliesQueued, insightsAdded, hitSafetyCap: consumed === DRAIN_SAFETY_CAP };
 }
