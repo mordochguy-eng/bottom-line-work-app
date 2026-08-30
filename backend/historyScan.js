@@ -77,15 +77,20 @@ async function buildSegments(settings) {
     greenApi.fetchAllChatsRaw(settings.apiUrl, settings.idInstance, settings.apiTokenInstance)
   ]);
 
+  // contactName (not name!) is the field that reflects a real phone-book
+  // save — `name` also fires for WhatsApp profile names people set
+  // themselves, which shows up even for total strangers who never got
+  // saved. Confirmed against the real account: ~980 individual chats had a
+  // `name` but an empty `contactName`.
   const namedContactIds = new Set(
-    rawContacts.filter(c => c.type === 'user' && c.id?.endsWith('@c.us') && c.name?.trim()).map(c => c.id)
+    rawContacts.filter(c => c.type === 'user' && c.id?.endsWith('@c.us') && c.contactName?.trim()).map(c => c.id)
   );
 
   const namedAndGroups = [
     ...groups.map(g => ({ chat_id: g.chat_id, name: g.name, isGroup: true })),
     ...rawContacts
-      .filter(c => c.type === 'user' && c.id?.endsWith('@c.us') && c.name?.trim())
-      .map(c => ({ chat_id: c.id, name: c.name, isGroup: false }))
+      .filter(c => c.type === 'user' && c.id?.endsWith('@c.us') && c.contactName?.trim())
+      .map(c => ({ chat_id: c.id, name: c.contactName, isGroup: false }))
   ];
 
   const unsavedIndividuals = allChats
