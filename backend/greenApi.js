@@ -20,11 +20,16 @@ export async function fetchChats(apiUrl, idInstance, apiTokenInstance) {
   try {
     const url = `${getBaseUrl(apiUrl, idInstance)}/getChats/${apiTokenInstance}`;
     const response = await axios.get(url, { timeout: 15000 });
-    return response.data.map(chat => ({
-      chat_id: chat.id,
-      name: chat.name || chat.id,
-      type: (chat.type === 'group' || chat.type === 'chat') ? 'general' : 'ignored'
-    }));
+    // getChats returns every chat — thousands of individual contacts (@c.us)
+    // alongside actual groups (@g.us). This tab is for group digests only,
+    // so individual contacts are filtered out here rather than shown.
+    return response.data
+      .filter(chat => chat.id?.endsWith('@g.us'))
+      .map(chat => ({
+        chat_id: chat.id,
+        name: chat.name || chat.id,
+        type: 'general'
+      }));
   } catch (error) {
     console.error('Error fetching chats:', error.message);
     throw new Error('Failed to fetch chats from Green API.');
