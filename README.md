@@ -49,6 +49,11 @@ bottom-line for S-On/
 
 ## הרצה ראשונה
 
+**דרישה חד-פעמית למחשב חדש:** [Node.js](https://nodejs.org) מותקן, ו-PM2 מותקן גלובלית:
+```bash
+npm install -g pm2
+```
+
 ```bash
 cd backend && npm install
 cd ../frontend && npm install
@@ -78,11 +83,12 @@ pm2 save
 **אחרי כל שינוי קוד** יש להריץ **`Publish.bat`** כדי לעדכן את הריפו הציבורי — אחרת כפתור הסנכרון ימשיך להגיש גרסה ישנה. הסקריפט לוקח את קבצי ה-git הנוכחיים (לא נוגע ב-`data/`) ודוחף אותם לריפו הציבורי.
 
 **מחשב חדש (למשל מחשב העבודה) — הורדה ראשונית בלי git ובלי חשבון GitHub:**
-1. גלוש אל https://github.com/mordochguy-eng/bottom-line-work-app → כפתור ירוק **Code** → **Download ZIP**
-2. חלץ לתיקייה, למשל `C:\AI Software\bottom-line for S-On`
-3. `npm install` בתוך `backend/` ובתוך `frontend/`
-4. הרץ עם `start-pm2.bat` (או `node backend/server.js` + `npm run dev` בשני חלונות)
-5. **חד-פעמי, כדי שהאפליקציה תעלה אוטומטית באתחול/כניסה/התעוררות משינה** (בדיוק כמו ה-bottom-line האישי): לחיצה כפולה על **`Register-AutoStart.bat`**. לא צריך הרשאת מנהל. רושם משימת Task Scheduler בשם `BottomLineWork-AutoStart` שמריצה `pm2 resurrect` ומציגה התרעת Windows עם התוצאה.
+1. ודא ש-[Node.js](https://nodejs.org) מותקן, ואז `npm install -g pm2` (חד-פעמי, אחרת `start-pm2.bat` ייכשל עם "pm2 is not recognized")
+2. גלוש אל https://github.com/mordochguy-eng/bottom-line-work-app → כפתור ירוק **Code** → **Download ZIP**
+3. חלץ לתיקייה, למשל `C:\AI Software\bottom-line for S-On`
+4. `npm install` בתוך `backend/` ובתוך `frontend/`
+5. הרץ עם `start-pm2.bat` (או `node backend/server.js` + `npm run dev` בשני חלונות)
+6. **חד-פעמי, כדי שהאפליקציה תעלה אוטומטית באתחול/כניסה/התעוררות משינה** (בדיוק כמו ה-bottom-line האישי): לחיצה כפולה על **`Register-AutoStart.bat`**. לא צריך הרשאת מנהל. רושם משימת Task Scheduler בשם `BottomLineWork-AutoStart` שמריצה `pm2 resurrect` ומציגה התרעת Windows עם התוצאה.
 
 מכאן והלאה — כפתור **"סנכרן גרסה"** בהגדרות מספיק לכל עדכון, בלי לחזור על השלבים האלו.
 
