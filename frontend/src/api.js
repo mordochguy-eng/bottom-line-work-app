@@ -26,7 +26,7 @@ export const api = {
 
   getActionItems: () => request('/action-items'),
   toggleActionItem: (id, completed) => request(`/action-items/${id}/toggle`, { method: 'POST', body: JSON.stringify({ completed }) }),
-  toggleActionItemSaved: (id, saved_for_later) => request(`/action-items/${id}/toggle-save`, { method: 'POST', body: JSON.stringify({ saved_for_later }) }),
+  toggleActionItemSaved: (id, saved_for_later, snooze_days) => request(`/action-items/${id}/toggle-save`, { method: 'POST', body: JSON.stringify({ saved_for_later, snooze_days }) }),
 
   getScheduledMessages: () => request('/scheduled-messages'),
   createScheduledMessage: (msg) => request('/scheduled-messages', { method: 'POST', body: JSON.stringify(msg) }),

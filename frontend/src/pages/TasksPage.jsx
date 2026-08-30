@@ -90,8 +90,33 @@ export default function TasksPage() {
     try { await api.toggleActionItem(item.id, !item.completed); await load(); } catch (err) { toast(err.message, 'error'); }
   }
 
-  async function toggleSaved(item) {
-    try { await api.toggleActionItemSaved(item.id, !item.saved_for_later); await load(); } catch (err) { toast(err.message, 'error'); }
+  async function handleSnooze(item, days) {
+    try {
+      await api.toggleActionItemSaved(item.id, true, days);
+      toast('נשמר להמשך — יחזור לרשימה הפעילה בעוד ' + days + ' ימים, וגם יוזכר בתדרוך הבוקר', 'info');
+      await load();
+    } catch (err) { toast(err.message, 'error'); }
+  }
+
+  async function handleUnsnooze(item) {
+    try { await api.toggleActionItemSaved(item.id, false); await load(); } catch (err) { toast(err.message, 'error'); }
+  }
+
+  // Universal deep link (works for Office 365 / Outlook web) — no download,
+  // no backend involved, just opens a pre-filled event compose screen.
+  function outlookCalendarUrl(item) {
+    const start = new Date(`${item.deadline}T09:00:00`);
+    const end = new Date(start.getTime() + 30 * 60000);
+    const fmt = (d) => d.toISOString().replace(/\.\d{3}Z$/, '');
+    const params = new URLSearchParams({
+      path: '/calendar/action/compose',
+      rru: 'addevent',
+      subject: item.task,
+      startdt: fmt(start),
+      enddt: fmt(end),
+      body: [chatName(item.chat_id), item.assignee ? `אחראי: ${item.assignee}` : null].filter(Boolean).join(' | ')
+    });
+    return `https://outlook.office.com/calendar/0/deeplink/compose?${params.toString()}`;
   }
 
   const filtered = items.filter(i => {
@@ -208,7 +233,7 @@ export default function TasksPage() {
                   <SortTh label="קטגוריה" sortKey="category" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
                   <SortTh label="קבוצה / מקור" sortKey="chat_id" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
                   <SortTh label="אחראי" sortKey="assignee" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
-                  <SortTh label="תאריך יעד" sortKey="deadline" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
+                  <SortTh label="יעד" sortKey="deadline" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
                   <SortTh label="נוצר" sortKey="created_at" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
                   <th>סטטוס</th>
                   <th></th>
@@ -222,16 +247,36 @@ export default function TasksPage() {
                     <td>{item.category ? <span className="badge badge-info">{item.category}</span> : '—'}</td>
                     <td>{chatName(item.chat_id)}</td>
                     <td>{item.assignee || '—'}</td>
-                    <td>{item.deadline || '—'}</td>
+                    <td>
+                      {item.deadline || '—'}
+                      {item.deadline && (
+                        <a href={outlookCalendarUrl(item)} target="_blank" rel="noreferrer" title="הוסף ליומן Outlook" style={{ marginRight: 6 }}>📅</a>
+                      )}
+                    </td>
                     <td style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{new Date(item.created_at).toLocaleString('he-IL')}</td>
                     <td>
                       <input type="checkbox" checked={item.completed} onChange={() => toggleComplete(item)} style={{ width: 18, height: 18 }} />
                     </td>
                     <td>
                       {!item.completed && (
-                        <button className="btn btn-sm" onClick={() => toggleSaved(item)}>
-                          {item.saved_for_later ? 'החזר לפעילות' : 'שמור להמשך'}
-                        </button>
+                        item.saved_for_later ? (
+                          <button className="btn btn-sm" onClick={() => handleUnsnooze(item)} title={item.snoozed_until ? `יחזור אוטומטית ב-${new Date(item.snoozed_until).toLocaleDateString('he-IL')}` : ''}>
+                            החזר לפעילות
+                          </button>
+                        ) : (
+                          <select
+                            className="form-select"
+                            style={{ padding: '5px 8px', fontSize: '0.78rem', width: 'auto' }}
+                            value=""
+                            onChange={(e) => { if (e.target.value) handleSnooze(item, Number(e.target.value)); }}
+                          >
+                            <option value="">שמור להמשך...</option>
+                            <option value="1">תזכיר לי מחר</option>
+                            <option value="3">בעוד 3 ימים</option>
+                            <option value="5">בעוד 5 ימים</option>
+                            <option value="7">בעוד שבוע</option>
+                          </select>
+                        )
                       )}
                     </td>
                   </tr>

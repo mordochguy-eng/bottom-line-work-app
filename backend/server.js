@@ -102,12 +102,18 @@ app.post('/api/chats/summarize', async (req, res) => {
     const allMessages = await db.getMessagesForChat(chat_id);
     if (allMessages.length === 0) throw new Error('אין הודעות לסיכום בקבוצה זו');
 
-    const messagesText = allMessages.map(m => `[${m.sender_name}]: ${m.body}`).join('\n');
+    const messagesText = allMessages.map(m => `[${new Date(m.timestamp * 1000).toLocaleDateString('he-IL')} ${m.sender_name}]: ${m.body}`).join('\n');
     const summaryData = await gemini.summarizeMessages(settings.geminiApiKey, messagesText, chat.name);
     const summary = await db.insertSummary(chat_id, summaryData);
 
-    if (summaryData.actionItems?.length) {
-      await db.insertActionItems(chat_id, summaryData.actionItems);
+    // "לידיעה" groups are informational by nature and rarely need action -
+    // skip task extraction there instead of hoping the prompt guesses right.
+    if (summaryData.actionItems?.length && chat.profile_type !== 'info') {
+      const lastTimestamp = allMessages[allMessages.length - 1]?.timestamp;
+      await db.insertActionItems(chat_id, summaryData.actionItems.map(it => ({
+        ...it,
+        created_at: scheduler.resolveMessageCreatedAt(it.messageDate, lastTimestamp)
+      })));
     }
 
     await db.updateChat(chat_id, { last_summary_at: new Date().toISOString() });
@@ -174,7 +180,16 @@ app.post('/api/action-items/:id/toggle', async (req, res) => {
 });
 
 app.post('/api/action-items/:id/toggle-save', async (req, res) => {
-  try { res.json(await db.setActionItemSavedForLater(Number(req.params.id), req.body.saved_for_later)); } catch (error) { handleError(res, error); }
+  try {
+    const { saved_for_later, snooze_days } = req.body;
+    let snoozedUntil = null;
+    if (saved_for_later && snooze_days) {
+      const d = new Date();
+      d.setDate(d.getDate() + Number(snooze_days));
+      snoozedUntil = d.toISOString();
+    }
+    res.json(await db.setActionItemSavedForLater(Number(req.params.id), saved_for_later, snoozedUntil));
+  } catch (error) { handleError(res, error); }
 });
 
 // ---------- Scheduled messages ----------
@@ -332,6 +347,7 @@ app.post('/api/briefing/send', async (req, res) => {
     const data = await db.getMorningBriefingData();
     const text = buildBriefingText(data);
     await greenApi.sendWhatsAppMessage(settings.apiUrl, settings.idInstance, settings.apiTokenInstance, settings.recipientChatId, text);
+    await clearResurfacedSnoozes(data);
     res.json({ ok: true, text });
   } catch (error) { handleError(res, error); }
 });
@@ -348,13 +364,26 @@ function buildBriefingText(data) {
     data.upcoming.forEach(i => { text += `• ${i.task}${i.deadline ? ` (יעד: ${i.deadline})` : ''}\n`; });
     text += `\n`;
   }
-  if (!data.overdue.length && !data.upcoming.length) {
+  if (data.resurfaced?.length) {
+    text += `🔔 *תזכורות שחזרו (שמרת להמשך):*\n`;
+    data.resurfaced.forEach(i => { text += `• ${i.task}\n`; });
+    text += `\n`;
+  }
+  if (!data.overdue.length && !data.upcoming.length && !data.resurfaced?.length) {
     text += `אין משימות דחופות היום. יום נעים! 🙌\n\n`;
   }
   if (data.pendingScheduled) {
     text += `📨 ${data.pendingScheduled} הודעות מתוזמנות ממתינות לשליחה היום.\n`;
   }
   return text;
+}
+
+// Once a snoozed task is mentioned in the briefing it moves back to the
+// active list instead of nagging again every day until manually resolved.
+async function clearResurfacedSnoozes(data) {
+  for (const item of data.resurfaced || []) {
+    await db.setActionItemSavedForLater(item.id, false);
+  }
 }
 
 // ---------- Cron: daily digest / morning briefing (checked every minute) ----------
@@ -377,10 +406,16 @@ cron.schedule('* * * * *', async () => {
           await db.saveMessages(chat.chat_id, history);
           const allMessages = await db.getMessagesForChat(chat.chat_id);
           if (allMessages.length === 0) continue;
-          const messagesText = allMessages.map(m => `[${m.sender_name}]: ${m.body}`).join('\n');
+          const messagesText = allMessages.map(m => `[${new Date(m.timestamp * 1000).toLocaleDateString('he-IL')} ${m.sender_name}]: ${m.body}`).join('\n');
           const summaryData = await gemini.summarizeMessages(settings.geminiApiKey, messagesText, chat.name);
           await db.insertSummary(chat.chat_id, summaryData);
-          if (summaryData.actionItems?.length) await db.insertActionItems(chat.chat_id, summaryData.actionItems);
+          if (summaryData.actionItems?.length && chat.profile_type !== 'info') {
+            const lastTimestamp = allMessages[allMessages.length - 1]?.timestamp;
+            await db.insertActionItems(chat.chat_id, summaryData.actionItems.map(it => ({
+              ...it,
+              created_at: scheduler.resolveMessageCreatedAt(it.messageDate, lastTimestamp)
+            })));
+          }
           await db.updateChat(chat.chat_id, { last_summary_at: new Date().toISOString() });
           await db.clearMessagesForChat(chat.chat_id);
           if (settings.recipientChatId) {
@@ -399,6 +434,7 @@ cron.schedule('* * * * *', async () => {
         const data = await db.getMorningBriefingData();
         const text = buildBriefingText(data);
         await greenApi.sendWhatsAppMessage(settings.apiUrl, settings.idInstance, settings.apiTokenInstance, settings.recipientChatId, text);
+        await clearResurfacedSnoozes(data);
       }
     }
   } catch (err) {
