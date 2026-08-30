@@ -145,9 +145,9 @@ export async function identifyRecurringMotifs(apiKey, { segmentLabel, questions 
   const systemInstruction = `אתה עוזר שמנתח אוסף הודעות/שאלות שהתקבלו בוואטסאפ מקבוצת שולחים בשם "${segmentLabel}", ומזהה מוטיבים ושאלות שחוזרות על עצמן מספר פעמים.
 עבור כל מוטיב חוזר, נסח שאלה נפוצה מייצגת (בעברית, בגוף שני - איך אדם היה שואל אותה) ותשובה קצרה, ברורה ומקצועית שמתאימה לענות בה באופן כללי לכל מי ששואל שאלה דומה.
 כלול רק מוטיבים שחזרו בפועל אצל כמה שולחים שונים או בכמה הזדמנויות - אל תמציא שאלה על סמך הודעה בודדת.`;
-  const schema = `{ "faqSuggestions": [ { "question": "השאלה הנפוצה בעברית", "answer": "תשובה מוצעת בעברית" } ] }`;
+  const schema = `{ "faqSuggestions": [ { "question": "השאלה הנפוצה בעברית", "answer": "תשובה מוצעת בעברית", "category": "קטגוריה קצרה", "count": 0 } ] }`;
   const list = questions.map((q, i) => `${i + 1}. ${q}`).join('\n');
-  const prompt = `רשימת הודעות/שאלות שהתקבלו מ"${segmentLabel}":\n${list}\n\nהחזר אך ורק אובייקט JSON התואם לסכימה: ${schema}\nאם אין מוטיב חוזר משמעותי, החזר faqSuggestions: []`;
+  const prompt = `רשימת ${questions.length} הודעות/שאלות שהתקבלו מ"${segmentLabel}":\n${list}\n\nלכל מוטיב שתמצא, ציין גם קטגוריה קצרה (למשל "בדיקת זכאות", "ביטול סמינר", "בקשה להירשם") וכמה הודעות מהרשימה תואמות אותו. מיין מהשכיח ביותר לפחות שכיח.\nהחזר אך ורק אובייקט JSON התואם לסכימה: ${schema}\nאם אין מוטיב חוזר משמעותי, החזר faqSuggestions: []`;
   return callGemini(apiKey, 'gemini-3.5-flash', systemInstruction, prompt, true);
 }
 
@@ -162,6 +162,23 @@ ${faqText}`;
     ? `השולח, ${senderName}, נמצא ברשימת אנשי הקשר המאושרים למענה אוטומטי.`
     : `השולח, ${senderName}, אינו איש קשר שמור - זהו מספר לא מוכר ששאל שאלה שתואמת לשאלה נפוצה.`;
   const prompt = `${contactContext}\n\nההודעה שהתקבלה:\n"${incomingMessage}"\n\nנסח טיוטת תשובה קצרה (2-4 משפטים) בעברית.`;
+  return callGemini(apiKey, 'gemini-3.5-flash', systemInstruction, prompt, false);
+}
+
+/** Free-form Q&A grounded in a group's actual message transcript, with optional prior turns for follow-ups. */
+export async function askGeminiAboutChat(apiKey, chatName, transcript, question, chatHistory = []) {
+  const systemInstruction = `אתה עוזר שעונה על שאלות לגבי תוכן קבוצת וואטסאפ ספציפית.
+קיבלת את התמליל המלא של קבוצת "${chatName}" (כל שורה היא "[תאריך] שולח: הודעה").
+ענה על שאלת המשתמש בהתבסס אך ורק על מה שנכתב בפועל בתמליל.
+אם המידע לא נמצא בתמליל, אמור זאת בכנות ("לא נמצא מידע על כך בשיחה") במקום לנחש.
+ענה בעברית בלבד, בפורמט Markdown נקי (הדגשות, רשימות, טבלאות כשמתאים).`;
+
+  const historyPrompt = chatHistory.length > 0
+    ? `להלן היסטוריית השיחה איתך עד כה:\n${chatHistory.map(h => `${h.role === 'user' ? 'משתמש' : 'עוזר'}: ${h.text}`).join('\n')}\n\n`
+    : '';
+
+  const prompt = `תמליל מלא של קבוצת הוואטסאפ "${chatName}":\n"""\n${transcript}\n"""\n\n${historyPrompt}שאלת המשתמש:\n"${question}"\n\nענה בעברית, מבוסס אך ורק על התמליל שלמעלה.`;
+
   return callGemini(apiKey, 'gemini-3.5-flash', systemInstruction, prompt, false);
 }
 

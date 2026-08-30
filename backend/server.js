@@ -31,7 +31,12 @@ app.get('/api/settings', async (req, res) => {
 
 app.post('/api/settings', async (req, res) => {
   try {
-    const updated = await db.saveSettings(req.body);
+    const patch = { ...req.body };
+    // recipientChatId feeds every WhatsApp send (digest/briefing/manual) as
+    // a chatId directly - normalize here so a bare phone number typed in
+    // the UI doesn't silently fail every send.
+    if (patch.recipientChatId) patch.recipientChatId = scheduler.normaliseChatId(patch.recipientChatId);
+    const updated = await db.saveSettings(patch);
     res.json(updated);
   } catch (error) { handleError(res, error); }
 });
@@ -72,6 +77,13 @@ app.post('/api/chats/toggle-digest', async (req, res) => {
   try {
     const { chat_id, include_in_digest } = req.body;
     res.json(await db.updateChat(chat_id, { include_in_digest }));
+  } catch (error) { handleError(res, error); }
+});
+
+app.post('/api/chats/category', async (req, res) => {
+  try {
+    const { chat_id, category } = req.body;
+    res.json(await db.updateChat(chat_id, { profile_type: category }));
   } catch (error) { handleError(res, error); }
 });
 
@@ -116,6 +128,40 @@ app.get('/api/chats/:chatId/summaries', async (req, res) => {
 
 app.get('/api/summaries/latest', async (req, res) => {
   try { res.json(await db.getLatestSummaries()); } catch (error) { handleError(res, error); }
+});
+
+// Sends the already-computed latest summary as-is — unlike /chats/summarize,
+// this never re-summarizes, so it's safe to click right after "סכם עכשיו".
+app.post('/api/chats/send-digest', async (req, res) => {
+  try {
+    const { chat_id } = req.body;
+    const settings = await db.getSettings();
+    if (!settings.recipientChatId) throw new Error('לא הוגדר יעד לשליחת סיכומים בהגדרות');
+    const chats = await db.getChats();
+    const chat = chats.find(c => c.chat_id === chat_id);
+    if (!chat) throw new Error('קבוצה לא נמצאה');
+    const summaries = await db.getSummariesForChat(chat_id, 1);
+    if (!summaries.length) throw new Error('אין עדיין סיכום לקבוצה זו');
+    const summary = summaries[0];
+    const text = gemini.formatSummaryForWhatsApp(chat.name, summary.content);
+    await greenApi.sendWhatsAppMessage(settings.apiUrl, settings.idInstance, settings.apiTokenInstance, settings.recipientChatId, text);
+    res.json(await db.markSummarySent(summary.id));
+  } catch (error) { handleError(res, error); }
+});
+
+app.post('/api/ai/ask-about-chat', async (req, res) => {
+  try {
+    const { chat_id, question, chatHistory } = req.body;
+    const settings = await db.getSettings();
+    if (!settings.geminiApiKey) throw new Error('לא הוגדר מפתח Gemini בהגדרות');
+    const chats = await db.getChats();
+    const chat = chats.find(c => c.chat_id === chat_id);
+    if (!chat) throw new Error('קבוצה לא נמצאה');
+    const history = await greenApi.fetchChatHistory(settings.apiUrl, settings.idInstance, settings.apiTokenInstance, chat_id, 150);
+    const transcript = history.map(m => `[${new Date(m.timestamp * 1000).toLocaleDateString('he-IL')}] ${m.sender_name}: ${m.body}`).join('\n');
+    const answer = await gemini.askGeminiAboutChat(settings.geminiApiKey, chat.name, transcript, question, chatHistory || []);
+    res.json({ answer });
+  } catch (error) { handleError(res, error); }
 });
 
 // ---------- Action items ----------

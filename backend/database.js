@@ -131,11 +131,20 @@ export async function insertSummary(chatId, content) {
     id: nextId(summaries),
     chat_id: chatId,
     content,
+    is_sent: false,
     created_at: new Date().toISOString()
   };
   summaries.push(entry);
   await writeJson('summaries.json', summaries);
   return entry;
+}
+export async function markSummarySent(id) {
+  const summaries = await readJson('summaries.json', []);
+  const idx = summaries.findIndex(s => s.id === id);
+  if (idx === -1) throw new Error('Summary not found');
+  summaries[idx].is_sent = true;
+  await writeJson('summaries.json', summaries);
+  return summaries[idx];
 }
 export async function getSummariesForChat(chatId, limit = 30) {
   const all = await readJson('summaries.json', []);
@@ -281,7 +290,7 @@ export async function insertFaqSuggestions(suggestions) {
   );
   if (fresh.length === 0) return [];
   let id = nextId(all);
-  const created = fresh.map(s => ({ id: id++, question: s.question, answer: s.answer }));
+  const created = fresh.map(s => ({ id: id++, question: s.question, answer: s.answer, category: s.category || null, count: s.count || null }));
   await writeJson('faq.json', [...all, ...created]);
   return created;
 }
