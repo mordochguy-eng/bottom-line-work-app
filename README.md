@@ -58,7 +58,28 @@ pm2 save
 
 כפתור **"סנכרן גרסה עכשיו"** בהגדרות מושך zip עדכני מהריפו הציבורי המוגדר ב-`sync-config.json`, מחליף את קבצי הקוד (לא נוגע ב-`backend/data/`), ומפעיל מחדש את השרתים (דרך PM2).
 
-**שלב הגדרה חד-פעמי:** יש ליצור שני ריפואים ב-GitHub (בדומה למחולל כרטיסי הטיסה) — ריפו פרטי לעבודה השוטפת וריפו ציבורי להפצה בלבד שממנו הכפתור מושך, ולמלא את שם הריפו הציבורי בתוך `sync-config.json`. זה עדיין לא בוצע בפרויקט הזה.
+**שני הריפואים** (בדומה למחולל כרטיסי הטיסה):
+
+| ריפו | מצב | תפקיד |
+|---|---|---|
+| [`bottom-line-work`](https://github.com/mordochguy-eng/bottom-line-work) | פרטי | ריפו העבודה השוטפת |
+| [`bottom-line-work-app`](https://github.com/mordochguy-eng/bottom-line-work-app) | ציבורי | קבצי הפצה בלבד (בלי `data/`) — זה שהכפתור מושך ממנו |
+
+**אחרי כל שינוי קוד** יש להריץ **`Publish.bat`** כדי לעדכן את הריפו הציבורי — אחרת כפתור הסנכרון ימשיך להגיש גרסה ישנה. הסקריפט לוקח את קבצי ה-git הנוכחיים (לא נוגע ב-`data/`) ודוחף אותם לריפו הציבורי.
+
+**מחשב חדש (למשל מחשב העבודה) — הורדה ראשונית בלי git ובלי חשבון GitHub:**
+1. גלוש אל https://github.com/mordochguy-eng/bottom-line-work-app → כפתור ירוק **Code** → **Download ZIP**
+2. חלץ לתיקייה, למשל `C:\AI Software\bottom-line for S-On`
+3. `npm install` בתוך `backend/` ובתוך `frontend/`
+4. הרץ עם `start-pm2.bat` (או `node backend/server.js` + `npm run dev` בשני חלונות)
+
+מכאן והלאה — כפתור **"סנכרן גרסה"** בהגדרות מספיק לכל עדכון, בלי לחזור על השלבים האלו.
+
+**חלופה למחשב שלך, שבו כבר יש git מחובר:**
+```bash
+gh auth login
+gh repo clone mordochguy-eng/bottom-line-work "C:\AI Software\bottom-line for S-On"
+```
 
 ## מה שונה מה-bottom-line האישי
 
