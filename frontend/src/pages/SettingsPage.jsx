@@ -45,6 +45,7 @@ export default function SettingsPage() {
   async function handleCheckConnection() {
     setChecking(true);
     try {
+      await api.saveSettings(settings); // always test what's currently in the form, not stale saved values
       const res = await api.getInstanceStatus();
       setStatus(res);
       toast(res.connected ? 'מחובר בהצלחה ל-Green API' : `לא מחובר: ${res.reason || res.raw?.stateInstance || ''}`, res.connected ? 'success' : 'error');
