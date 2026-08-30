@@ -100,6 +100,21 @@ async function buildSegments(settings) {
   return { namedAndGroups, unsavedIndividuals };
 }
 
+// Filters greeting-only chatter ("היי", "שלום", "תודה", emoji-only replies)
+// out of the motif-analysis input — the account owner only cares about the
+// actual request, not the "hi, how can I help" pleasantries around it.
+const GREETING_ONLY = /^(hi|hey|hello|ok|בסדר|אוקיי|אוקי|יאלה|יאללה)[\s!.?😊🙏👍❤️]*$/i;
+const PURE_GREETING_WORDS = new Set(['היי', 'הי', 'שלום', 'בוקר', 'טוב', 'ערב', 'צהריים', 'טובים', 'תודה', 'רבה', 'תודהה']);
+
+function isLowSignalMessage(text) {
+  const trimmed = (text || '').trim();
+  if (trimmed.length < 6) return true; // too short to carry a real request
+  if (GREETING_ONLY.test(trimmed)) return true;
+  const words = trimmed.split(/\s+/).filter(Boolean);
+  if (words.length <= 3 && words.every(w => PURE_GREETING_WORDS.has(w.replace(/[^\p{L}]/gu, '')))) return true;
+  return false;
+}
+
 async function scanSegment(settings, label, targets, cutoffSeconds, remainingLimit, extractTasks) {
   const questions = [];
   let count = 0;
@@ -113,7 +128,7 @@ async function scanSegment(settings, label, targets, cutoffSeconds, remainingLim
         state.chatsWithHistory++;
 
         for (const m of recent) {
-          if (m.sender_name !== 'אני' && m.body && questions.length < MAX_QUESTIONS_PER_SEGMENT) {
+          if (m.sender_name !== 'אני' && m.body && !isLowSignalMessage(m.body) && questions.length < MAX_QUESTIONS_PER_SEGMENT) {
             questions.push(m.body);
           }
         }

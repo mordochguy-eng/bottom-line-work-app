@@ -11,6 +11,8 @@ export default function ApprovalQueuePage() {
   const [edits, setEdits] = useState({});
   const [newContact, setNewContact] = useState({ name: '', phone: '' });
   const [newFaq, setNewFaq] = useState({ question: '', answer: '' });
+  const [editingFaqId, setEditingFaqId] = useState(null);
+  const [faqEdit, setFaqEdit] = useState({ question: '', answer: '' });
   const toast = useToast();
 
   async function load() {
@@ -74,6 +76,25 @@ export default function ApprovalQueuePage() {
 
   async function handleDeleteFaq(id) {
     try { await api.deleteFaq(id); await load(); } catch (err) { toast(err.message, 'error'); }
+  }
+
+  function startEditFaq(f) {
+    setEditingFaqId(f.id);
+    setFaqEdit({ question: f.question, answer: f.answer });
+  }
+
+  function cancelEditFaq() {
+    setEditingFaqId(null);
+  }
+
+  async function handleSaveFaq(id) {
+    if (!faqEdit.question.trim() || !faqEdit.answer.trim()) { toast('שאלה ותשובה לא יכולות להיות ריקות', 'error'); return; }
+    try {
+      await api.updateFaq(id, faqEdit);
+      setEditingFaqId(null);
+      toast('התשובה עודכנה', 'success');
+      await load();
+    } catch (err) { toast(err.message, 'error'); }
   }
 
   return (
@@ -150,13 +171,39 @@ export default function ApprovalQueuePage() {
             <button className="btn btn-primary" type="submit">הוסף</button>
           </form>
           {faqs.map(f => (
-            <div key={f.id} className="list-row">
-              <div className="list-row-main">
-                <div className="list-row-title">{f.question}</div>
-                <div className="list-row-sub">{f.answer}</div>
+            editingFaqId === f.id ? (
+              <div key={f.id} className="glass-card" style={{ padding: 12, marginBottom: 8 }}>
+                <input
+                  className="form-input"
+                  value={faqEdit.question}
+                  onChange={(e) => setFaqEdit(p => ({ ...p, question: e.target.value }))}
+                  style={{ marginBottom: 8 }}
+                />
+                <textarea
+                  className="form-textarea"
+                  value={faqEdit.answer}
+                  onChange={(e) => setFaqEdit(p => ({ ...p, answer: e.target.value }))}
+                  style={{ marginBottom: 8 }}
+                />
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn btn-sm btn-success" onClick={() => handleSaveFaq(f.id)}>💾 שמור</button>
+                  <button className="btn btn-sm" onClick={cancelEditFaq}>ביטול</button>
+                </div>
               </div>
-              <button className="btn btn-sm btn-danger" onClick={() => handleDeleteFaq(f.id)}>הסר</button>
-            </div>
+            ) : (
+              <div key={f.id} className="list-row">
+                <div className="list-row-main">
+                  <div className="list-row-title">
+                    {f.question}
+                    {f.category && <span className="badge badge-info" style={{ marginRight: 8 }}>{f.category}</span>}
+                    {f.count ? <span className="badge badge-muted" style={{ marginRight: 6 }}>{f.count} פניות</span> : null}
+                  </div>
+                  <div className="list-row-sub">{f.answer}</div>
+                </div>
+                <button className="btn btn-sm" onClick={() => startEditFaq(f)}>✏️ ערוך</button>
+                <button className="btn btn-sm btn-danger" onClick={() => handleDeleteFaq(f.id)}>הסר</button>
+              </div>
+            )
           ))}
         </div>
       </div>

@@ -156,6 +156,7 @@ body {
 .badge-danger { background: rgba(190, 18, 60, 0.1); color: var(--accent-danger); }
 .badge-info { background: rgba(3, 105, 161, 0.1); color: var(--accent-info); }
 .badge-muted { background: rgba(113, 113, 122, 0.12); color: var(--text-muted); }
+.badge-purple { background: rgba(147, 51, 234, 0.08); color: #7e22ce; }
 
 .feed-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
 

@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import { useToast } from '../components/Toast.jsx';
 import SortTh from '../components/SortTh.jsx';
 import { useSort } from '../hooks/useSort.js';
+import { CATEGORIES, CATEGORY_ORDER } from '../constants/categories.js';
 
 export default function GroupsPage() {
   const [chats, setChats] = useState([]);
@@ -37,6 +38,13 @@ export default function GroupsPage() {
   async function handleToggleDigest(chatId, current) {
     try {
       await api.toggleChatDigest(chatId, !current);
+      await load();
+    } catch (err) { toast(err.message, 'error'); }
+  }
+
+  async function handleCategoryChange(chatId, category) {
+    try {
+      await api.setChatCategory(chatId, category);
       await load();
     } catch (err) { toast(err.message, 'error'); }
   }
@@ -77,6 +85,7 @@ export default function GroupsPage() {
             <thead>
               <tr>
                 <SortTh label="שם" sortKey="name" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
+                <SortTh label="קטגוריה" sortKey="profile_type" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
                 <SortTh label="במעקב" sortKey="is_tracked" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
                 <SortTh label="כלול בסיכום היומי" sortKey="include_in_digest" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
                 <SortTh label="סיכום אחרון" sortKey="last_summary_at" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
@@ -87,6 +96,18 @@ export default function GroupsPage() {
               {sorted.map(chat => (
                 <tr key={chat.chat_id}>
                   <td>{chat.name}</td>
+                  <td>
+                    <select
+                      className="form-select"
+                      style={{ padding: '6px 10px', fontSize: '0.82rem' }}
+                      value={chat.profile_type || 'general'}
+                      onChange={(e) => handleCategoryChange(chat.chat_id, e.target.value)}
+                    >
+                      {CATEGORY_ORDER.map(key => (
+                        <option key={key} value={key}>{CATEGORIES[key].icon} {CATEGORIES[key].label}</option>
+                      ))}
+                    </select>
+                  </td>
                   <td>
                     <label className="switch">
                       <input type="checkbox" checked={chat.is_tracked} onChange={() => handleToggleTracked(chat.chat_id, chat.is_tracked)} />
