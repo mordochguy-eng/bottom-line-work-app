@@ -1,8 +1,11 @@
+// Icons are solid-color circles (not thematic emoji) on purpose — thematic
+// icons like 🤝/📢/🔔 render too visually similar at small sizes, so each
+// category gets an unambiguous color instead, matched to its badge color.
 export const CATEGORIES = {
-  info: { label: 'קבוצות לידיעה', icon: '🔔', color: '#0891b2', badge: 'badge-info' },
-  customers: { label: 'קבוצות לקוחות', icon: '🤝', color: '#b45309', badge: 'badge-warning' },
-  distribution: { label: 'קבוצות הפצה', icon: '📢', color: '#7e22ce', badge: 'badge-purple' },
-  general: { label: 'כללי', icon: '📂', color: '#475569', badge: 'badge-muted' }
+  info: { label: 'קבוצות לידיעה', icon: '🔵', color: '#0891b2', badge: 'badge-info' },
+  customers: { label: 'קבוצות לקוחות', icon: '🟠', color: '#b45309', badge: 'badge-warning' },
+  distribution: { label: 'קבוצות הפצה', icon: '🟣', color: '#7e22ce', badge: 'badge-purple' },
+  general: { label: 'כללי', icon: '⚪', color: '#475569', badge: 'badge-muted' }
 };
 
 export const CATEGORY_ORDER = ['customers', 'distribution', 'info', 'general'];
