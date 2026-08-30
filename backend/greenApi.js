@@ -171,6 +171,16 @@ export async function checkPhone(apiUrl, idInstance, apiTokenInstance, phone) {
   return response.data;
 }
 
+// The phone's synced contact list — includes both individuals (type:'user')
+// and groups (type:'group'), most without a saved name. Used by the
+// history-scan feature to limit its scope to named/known contacts instead
+// of every number that ever crossed the account.
+export async function getContacts(apiUrl, idInstance, apiTokenInstance) {
+  const endpoint = `${getBaseUrl(apiUrl, idInstance)}/getContacts/${apiTokenInstance}`;
+  const response = await axios.get(endpoint, { timeout: 20000 });
+  return response.data || [];
+}
+
 // ---------- Notification queue polling (used for the auto-reply feature) ----------
 // This is Green API's pull-based mechanism for real-time incoming messages:
 // no public URL is needed (unlike webhooks), which matters because this app

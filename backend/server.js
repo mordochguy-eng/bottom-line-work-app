@@ -8,7 +8,7 @@ import * as gemini from './gemini.js';
 import * as scheduler from './scheduler.js';
 import * as sync from './sync.js';
 import { startMessageListener, drainQueueNow } from './messageListener.js';
-import { runHistoryScan } from './historyScan.js';
+import { startHistoryScan, getScanStatus } from './historyScan.js';
 
 const app = express();
 app.use(cors());
@@ -243,11 +243,16 @@ app.post('/api/message-listener/sync-now', async (req, res) => {
   try { res.json(await drainQueueNow()); } catch (error) { handleError(res, error); }
 });
 
-app.post('/api/history-scan', async (req, res) => {
+app.post('/api/history-scan/start', (req, res) => {
   try {
     const days = Number(req.body.days) || 7;
-    res.json(await runHistoryScan(days));
+    const limit = req.body.limit != null ? Number(req.body.limit) : null;
+    res.json(startHistoryScan({ days, limit }));
   } catch (error) { handleError(res, error); }
+});
+
+app.get('/api/history-scan/status', (req, res) => {
+  res.json(getScanStatus());
 });
 
 // ---------- Sync ----------

@@ -144,6 +144,7 @@ export async function insertActionItems(chatId, items) {
     chat_id: chatId,
     task: it.task,
     assignee: it.assignee || '',
+    category: it.category || null,
     deadline: it.deadline || null,
     completed: false,
     saved_for_later: false,
