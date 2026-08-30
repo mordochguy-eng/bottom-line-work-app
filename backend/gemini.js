@@ -130,3 +130,22 @@ ${faqText}`;
   const prompt = `${contactContext}\n\nההודעה שהתקבלה:\n"${incomingMessage}"\n\nנסח טיוטת תשובה קצרה (2-4 משפטים) בעברית.`;
   return callGemini(apiKey, 'gemini-3.5-flash', systemInstruction, prompt, false);
 }
+
+/**
+ * Live per-message triage: does the account owner need to do something in
+ * response to this single incoming message? Runs on every message (group or
+ * 1:1) when live listening is enabled. Errs toward "no" for small talk,
+ * acknowledgements, and messages that are informational only.
+ */
+export async function analyzeMessageForAction(apiKey, { senderName, chatName, isGroup, text }) {
+  const systemInstruction = `אתה עוזר שממיין הודעות וואטסאפ נכנסות עבור בעל החשבון, וקובע אם ההודעה דורשת ממנו לעשות משהו (לענות למישהו, לבצע משימה שהתבקש לבצע, לעמוד בדדליין, לקבל החלטה).
+התעלם משיחת חולין, אישורי קבלה ("קיבלתי", "תודה", "👍"), עדכונים אינפורמטיביים בלבד, והודעות שלא דורשות פעולה מבעל החשבון באופן אישי.
+אם אינך בטוח, החזר needsAction: false - עדיף לפספס מקרה גבולי מאשר להציף ברשימת המשימות.`;
+  const schema = `{ "needsAction": true/false, "task": "תיאור קצר וברור של מה שצריך לעשות, בעברית, או null אם אין צורך בפעולה", "deadline": "תאריך יעד בפורמט YYYY-MM-DD אם צוין במפורש, אחרת null" }`;
+  const prompt = `הודעה שהתקבלה ${isGroup ? `בקבוצה "${chatName}"` : 'בצ׳אט אישי'} משולח בשם "${senderName}":
+"${text}"
+
+תאריך היום: ${new Date().toISOString().slice(0, 10)}.
+החזר אך ורק אובייקט JSON התואם לסכימה: ${schema}`;
+  return callGemini(apiKey, 'gemini-3.5-flash', systemInstruction, prompt, true);
+}

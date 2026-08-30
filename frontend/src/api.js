@@ -43,6 +43,7 @@ export const api = {
   approveQueueItem: (id, editedText) => request(`/approval-queue/${id}/approve`, { method: 'POST', body: JSON.stringify({ editedText }) }),
   rejectQueueItem: (id) => request(`/approval-queue/${id}/reject`, { method: 'POST' }),
   toggleAutoReply: (enabled) => request('/auto-reply/toggle', { method: 'POST', body: JSON.stringify({ enabled }) }),
+  toggleLiveInsights: (enabled) => request('/live-insights/toggle', { method: 'POST', body: JSON.stringify({ enabled }) }),
 
   getSyncConfig: () => request('/sync/config'),
   getSyncLog: () => request('/sync/log'),

@@ -7,7 +7,7 @@ import * as greenApi from './greenApi.js';
 import * as gemini from './gemini.js';
 import * as scheduler from './scheduler.js';
 import * as sync from './sync.js';
-import { startAutoReplyPolling } from './autoReply.js';
+import { startMessageListener } from './messageListener.js';
 
 const app = express();
 app.use(cors());
@@ -216,6 +216,10 @@ app.post('/api/auto-reply/toggle', async (req, res) => {
   try { res.json(await db.saveSettings({ autoReplyEnabled: !!req.body.enabled })); } catch (error) { handleError(res, error); }
 });
 
+app.post('/api/live-insights/toggle', async (req, res) => {
+  try { res.json(await db.saveSettings({ liveInsightsEnabled: !!req.body.enabled })); } catch (error) { handleError(res, error); }
+});
+
 // ---------- Sync ----------
 app.get('/api/sync/config', async (req, res) => {
   try { res.json(await sync.getSyncConfig()); } catch (error) { handleError(res, error); }
@@ -353,5 +357,5 @@ cron.schedule('* * * * *', async () => {
 
 app.listen(PORT, () => {
   console.log(`בשורה התחתונה — עבודה: השרת רץ על פורט ${PORT}`);
-  startAutoReplyPolling();
+  startMessageListener();
 });

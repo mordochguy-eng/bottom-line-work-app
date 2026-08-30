@@ -5,6 +5,7 @@ import { useToast } from '../components/Toast.jsx';
 export default function TasksPage() {
   const [items, setItems] = useState([]);
   const [chats, setChats] = useState([]);
+  const [settings, setSettings] = useState({});
   const [filter, setFilter] = useState('active'); // active | saved | completed
   const [loading, setLoading] = useState(true);
   const toast = useToast();
@@ -12,10 +13,19 @@ export default function TasksPage() {
   async function load() {
     setLoading(true);
     try {
-      const [a, c] = await Promise.all([api.getActionItems(), api.getChats()]);
+      const [a, c, s] = await Promise.all([api.getActionItems(), api.getChats(), api.getSettings()]);
       setItems(a);
       setChats(c);
+      setSettings(s);
     } catch (err) { toast(err.message, 'error'); } finally { setLoading(false); }
+  }
+
+  async function handleToggleLiveInsights() {
+    try {
+      const updated = await api.toggleLiveInsights(!settings.liveInsightsEnabled);
+      setSettings(updated);
+      toast(updated.liveInsightsEnabled ? 'האזנה חיה להודעות נכנסות הופעלה' : 'האזנה חיה הושבתה', 'info');
+    } catch (err) { toast(err.message, 'error'); }
   }
 
   useEffect(() => { load(); }, []);
@@ -41,9 +51,21 @@ export default function TasksPage() {
       <div className="page-header">
         <div className="page-title">
           <h2>✅ משימות</h2>
-          <p>משימות שחולצו אוטומטית מסיכומי הקבוצות</p>
+          <p>משימות מסיכומי הקבוצות, ומהאזנה חיה לכל הודעה נכנסת</p>
         </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.88rem', fontWeight: 600 }}>
+          🎧 האזנה חיה להודעות נכנסות {settings.liveInsightsEnabled ? 'פעילה' : 'כבויה'}
+          <label className="switch">
+            <input type="checkbox" checked={!!settings.liveInsightsEnabled} onChange={handleToggleLiveInsights} />
+            <span className="slider"></span>
+          </label>
+        </label>
       </div>
+      {settings.liveInsightsEnabled && (
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: -18, marginBottom: 18 }}>
+          כל הודעה נכנסת (בקבוצות ובצ'אטים אישיים) נבדקת אוטומטית — אם משהו דורש ממך פעולה, הוא מתווסף כאן.
+        </p>
+      )}
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
         {[['active', 'פעילות'], ['saved', 'שמורות להמשך'], ['completed', 'בוצעו']].map(([key, label]) => (
