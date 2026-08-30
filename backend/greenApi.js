@@ -237,6 +237,7 @@ export function parseIncomingMessage(notification) {
     isGroup,
     senderName: body.senderData?.senderName || body.senderData?.sender?.split('@')[0] || 'לא ידוע',
     senderPhone: (body.senderData?.sender || '').split('@')[0],
-    text
+    text,
+    timestamp: body.timestamp || null
   };
 }

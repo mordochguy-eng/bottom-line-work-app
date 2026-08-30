@@ -182,7 +182,12 @@ export async function insertActionItems(chatId, items) {
     deadline: it.deadline || null,
     completed: false,
     saved_for_later: false,
-    created_at: new Date().toISOString()
+    snoozed_until: null,
+    // The date the WhatsApp message was actually written, when the caller
+    // knows it (Gemini extracts it from the transcript) — falls back to now
+    // only when that's genuinely unavailable, so "נוצר" reflects reality
+    // instead of whenever a scan happened to run.
+    created_at: it.created_at || new Date().toISOString()
   }));
   const merged = [...all, ...created];
   await writeJson('action_items.json', merged);
@@ -199,11 +204,12 @@ export async function setActionItemCompleted(id, completed) {
   await writeJson('action_items.json', items);
   return items[idx];
 }
-export async function setActionItemSavedForLater(id, saved) {
+export async function setActionItemSavedForLater(id, saved, snoozedUntil = null) {
   const items = await getActionItems();
   const idx = items.findIndex(i => i.id === id);
   if (idx === -1) throw new Error('Action item not found');
   items[idx].saved_for_later = saved;
+  items[idx].snoozed_until = saved ? snoozedUntil : null;
   await writeJson('action_items.json', items);
   return items[idx];
 }
@@ -364,5 +370,8 @@ export async function getMorningBriefingData() {
   const soon = new Date(now.getTime() + 48 * 60 * 60 * 1000);
   const upcoming = actionItems.filter(i => !i.completed && i.deadline && new Date(i.deadline) <= soon);
   const overdue = actionItems.filter(i => !i.completed && i.deadline && new Date(i.deadline) < now);
-  return { upcoming, overdue, pendingScheduled: scheduled.filter(s => s.status === 'pending').length };
+  // "נודניק" nudge: snoozed ("שמור להמשך") tasks whose snooze just expired
+  // resurface here instead of silently staying hidden forever.
+  const resurfaced = actionItems.filter(i => !i.completed && i.saved_for_later && i.snoozed_until && new Date(i.snoozed_until) <= now);
+  return { upcoming, overdue, resurfaced, pendingScheduled: scheduled.filter(s => s.status === 'pending').length };
 }

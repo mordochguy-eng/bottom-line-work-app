@@ -1,5 +1,6 @@
 import * as db from './database.js';
 import * as greenApi from './greenApi.js';
+import * as scheduler from './scheduler.js';
 import { scanChatForActions, identifyRecurringMotifs } from './gemini.js';
 
 /**
@@ -87,7 +88,7 @@ async function buildSegments(settings) {
   );
 
   const namedAndGroups = [
-    ...groups.map(g => ({ chat_id: g.chat_id, name: g.name, isGroup: true })),
+    ...groups.map(g => ({ chat_id: g.chat_id, name: g.name, isGroup: true, category: g.profile_type })),
     ...rawContacts
       .filter(c => c.type === 'user' && c.id?.endsWith('@c.us') && c.contactName?.trim())
       .map(c => ({ chat_id: c.id, name: c.contactName, isGroup: false }))
@@ -133,7 +134,11 @@ async function scanSegment(settings, label, targets, cutoffSeconds, remainingLim
           }
         }
 
-        if (extractTasks) {
+        // "לידיעה" groups are informational by nature — the account owner
+        // said explicitly these rarely need a response, so skip task
+        // extraction there entirely rather than hoping the prompt guesses
+        // right group-by-group.
+        if (extractTasks && target.category !== 'info') {
           const messages = recent.map(m => ({ senderName: m.sender_name, text: m.body, timestamp: m.timestamp }));
           const result = await scanChatForActions(settings.geminiApiKey, { chatName: target.name, isGroup: target.isGroup, messages });
           const items = result?.items || [];
@@ -142,7 +147,8 @@ async function scanSegment(settings, label, targets, cutoffSeconds, remainingLim
               task: it.task,
               category: it.category || null,
               assignee: it.sender || target.name,
-              deadline: it.deadline || null
+              deadline: it.deadline || null,
+              created_at: scheduler.resolveMessageCreatedAt(it.messageDate, recent[recent.length - 1]?.timestamp)
             })));
             state.itemsAdded += created.length;
           }

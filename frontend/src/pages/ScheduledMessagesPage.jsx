@@ -245,9 +245,11 @@ export default function ScheduledMessagesPage() {
                   onChange={(e) => { setForm(p => ({ ...p, query: e.target.value, chat_id: '' })); setSuggestOpen(true); setCheckResult(null); }}
                   onFocus={() => setSuggestOpen(true)}
                 />
-                <button type="button" className="btn btn-sm" onClick={handleCheckPhone} disabled={checking || !form.query.trim()}>
-                  {checking ? '...' : '✓ בדוק'}
-                </button>
+                {!form.chat_id && (
+                  <button type="button" className="btn btn-sm" onClick={handleCheckPhone} disabled={checking || !form.query.trim()}>
+                    {checking ? '...' : '✓ בדוק'}
+                  </button>
+                )}
               </div>
               {suggestOpen && suggestions.length > 0 && (
                 <div className="autocomplete-list">

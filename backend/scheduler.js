@@ -3,6 +3,21 @@
 export const RETRY_BASE_DELAY_MS = 5 * 60 * 1000; // 5 minutes
 export const MISSED_MESSAGE_WINDOW_HOURS = 1;
 
+/**
+ * "נוצר" on an action item should reflect when the WhatsApp message was
+ * actually written, not when a scan/summarize happened to run. Prefer
+ * Gemini's extracted YYYY-MM-DD; fall back to a known real timestamp
+ * (seconds since epoch) instead of "now" when that's missing/unparsable.
+ */
+export function resolveMessageCreatedAt(messageDate, fallbackTimestampSeconds) {
+  if (messageDate && /^\d{4}-\d{2}-\d{2}$/.test(messageDate)) {
+    const d = new Date(`${messageDate}T12:00:00`);
+    if (!isNaN(d.getTime())) return d.toISOString();
+  }
+  if (fallbackTimestampSeconds) return new Date(fallbackTimestampSeconds * 1000).toISOString();
+  return new Date().toISOString();
+}
+
 export function isDue(msg, now = new Date()) {
   if (msg.status !== 'pending') return false;
   if (msg.attempts >= msg.max_attempts) return false;

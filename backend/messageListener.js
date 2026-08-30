@@ -65,7 +65,10 @@ async function runAutoReply(settings, parsed) {
 async function runLiveInsights(settings, parsed) {
   if (!settings.liveInsightsEnabled) return false;
   const chats = await db.getChats();
-  const chatName = chats.find(c => c.chat_id === parsed.chatId)?.name || parsed.senderName;
+  const chat = chats.find(c => c.chat_id === parsed.chatId);
+  // "לידיעה" groups are informational by nature and rarely need action.
+  if (chat?.profile_type === 'info') return false;
+  const chatName = chat?.name || parsed.senderName;
 
   const result = await analyzeMessageForAction(settings.geminiApiKey, {
     senderName: parsed.senderName,
@@ -78,7 +81,8 @@ async function runLiveInsights(settings, parsed) {
       task: result.task,
       category: result.category || null,
       assignee: parsed.senderName,
-      deadline: result.deadline || null
+      deadline: result.deadline || null,
+      created_at: parsed.timestamp ? new Date(parsed.timestamp * 1000).toISOString() : new Date().toISOString()
     }]);
     return true;
   }
