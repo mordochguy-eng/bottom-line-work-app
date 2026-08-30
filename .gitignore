@@ -1,0 +1,6 @@
+node_modules/
+backend/data/
+backend/.tmp-sync/
+frontend/dist/
+*.log
+.env

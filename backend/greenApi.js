@@ -1,0 +1,140 @@
+import axios from 'axios';
+
+function getBaseUrl(apiUrl, idInstance) {
+  const cleanUrl = apiUrl.replace(/\/+$/, '');
+  return `${cleanUrl}/waInstance${idInstance}`;
+}
+
+export async function checkInstanceStatus(apiUrl, idInstance, apiTokenInstance) {
+  try {
+    const url = `${getBaseUrl(apiUrl, idInstance)}/getStateInstance/${apiTokenInstance}`;
+    const response = await axios.get(url, { timeout: 8000 });
+    return response.data;
+  } catch (error) {
+    console.error('Error checking instance status:', error.message);
+    throw new Error('Failed to connect to Green API. Please check your credentials.');
+  }
+}
+
+export async function fetchChats(apiUrl, idInstance, apiTokenInstance) {
+  try {
+    const url = `${getBaseUrl(apiUrl, idInstance)}/getChats/${apiTokenInstance}`;
+    const response = await axios.get(url, { timeout: 15000 });
+    return response.data.map(chat => ({
+      chat_id: chat.id,
+      name: chat.name || chat.id,
+      type: (chat.type === 'group' || chat.type === 'chat') ? 'general' : 'ignored'
+    }));
+  } catch (error) {
+    console.error('Error fetching chats:', error.message);
+    throw new Error('Failed to fetch chats from Green API.');
+  }
+}
+
+export async function fetchChatHistory(apiUrl, idInstance, apiTokenInstance, chatId, count = 100) {
+  try {
+    const url = `${getBaseUrl(apiUrl, idInstance)}/getChatHistory/${apiTokenInstance}`;
+    const response = await axios.post(url, { chatId, count }, { timeout: 15000 });
+    const rawMsgs = response.data || [];
+    const normalized = rawMsgs.map(msg => {
+      let body = '';
+      let type = 'text';
+      if (msg.typeMessage === 'textMessage' || msg.typeMessage === 'extendedTextMessage') {
+        body = msg.textMessage || '';
+      } else if (msg.typeMessage === 'imageMessage') {
+        body = msg.caption || '[Image]'; type = 'image';
+      } else if (msg.typeMessage === 'audioMessage') {
+        body = '[Voice Message]'; type = 'audio';
+      } else if (msg.typeMessage === 'documentMessage') {
+        body = msg.caption || `[Document: ${msg.fileName || ''}]`; type = 'document';
+      } else {
+        body = msg.textMessage || `[Message: ${msg.typeMessage || 'unknown'}]`;
+      }
+      const senderId = msg.senderId || msg.sender || '';
+      const senderName = msg.senderName || (senderId ? senderId.split('@')[0] : 'אני');
+      return {
+        message_id: msg.idMessage || Math.random().toString(36).substring(7),
+        chat_id: chatId,
+        sender_id: senderId,
+        sender_name: senderName,
+        type,
+        body,
+        timestamp: msg.timestamp || Math.floor(Date.now() / 1000)
+      };
+    });
+    return normalized.reverse();
+  } catch (error) {
+    console.error(`Error fetching history for chat ${chatId}:`, error.message);
+    return [];
+  }
+}
+
+export async function sendWhatsAppMessage(apiUrl, idInstance, apiTokenInstance, chatId, message) {
+  try {
+    const url = `${getBaseUrl(apiUrl, idInstance)}/sendMessage/${apiTokenInstance}`;
+    const response = await axios.post(url, { chatId, message }, { timeout: 15000 });
+    return response.data;
+  } catch (error) {
+    console.error(`Error sending message to ${chatId}:`, error.message);
+    throw new Error('Failed to send WhatsApp message.');
+  }
+}
+
+export async function sendFile(apiUrl, idInstance, apiTokenInstance, chatId, { url, filename, caption = '' }) {
+  const endpoint = `${getBaseUrl(apiUrl, idInstance)}/sendFileByUrl/${apiTokenInstance}`;
+  const response = await axios.post(endpoint, { chatId, urlFile: url, fileName: filename, caption }, { timeout: 30000 });
+  return response.data;
+}
+
+export async function checkPhone(apiUrl, idInstance, apiTokenInstance, phone) {
+  const endpoint = `${getBaseUrl(apiUrl, idInstance)}/checkWhatsapp/${apiTokenInstance}`;
+  const response = await axios.post(endpoint, { phoneNumber: phone }, { timeout: 10000 });
+  return response.data;
+}
+
+// ---------- Notification queue polling (used for the auto-reply feature) ----------
+// This is Green API's pull-based mechanism for real-time incoming messages:
+// no public URL is needed (unlike webhooks), which matters because this app
+// runs on ordinary home/work machines behind NAT with no port exposed.
+
+export async function receiveNotification(apiUrl, idInstance, apiTokenInstance) {
+  try {
+    const url = `${getBaseUrl(apiUrl, idInstance)}/receiveNotification/${apiTokenInstance}`;
+    const response = await axios.get(url, { timeout: 20000 });
+    return response.data; // null when the queue is empty
+  } catch (error) {
+    console.error('Error receiving notification:', error.message);
+    return null;
+  }
+}
+
+export async function deleteNotification(apiUrl, idInstance, apiTokenInstance, receiptId) {
+  try {
+    const url = `${getBaseUrl(apiUrl, idInstance)}/deleteNotification/${apiTokenInstance}/${receiptId}`;
+    await axios.delete(url, { timeout: 10000 });
+  } catch (error) {
+    console.error('Error deleting notification:', error.message);
+  }
+}
+
+// Extracts a normalized {chatId, senderName, isGroup, text} from a raw
+// incomingMessageReceived webhook/notification body, or null if it isn't one.
+export function parseIncomingMessage(notification) {
+  const body = notification?.body;
+  if (!body || body.typeWebhook !== 'incomingMessageReceived') return null;
+  const chatId = body.senderData?.chatId;
+  if (!chatId) return null;
+  const isGroup = chatId.endsWith('@g.us');
+  const md = body.messageData || {};
+  let text = null;
+  if (md.typeMessage === 'textMessage') text = md.textMessageData?.textMessage;
+  else if (md.typeMessage === 'extendedTextMessage') text = md.extendedTextMessageData?.text;
+  if (!text) return null;
+  return {
+    chatId,
+    isGroup,
+    senderName: body.senderData?.senderName || body.senderData?.sender?.split('@')[0] || 'לא ידוע',
+    senderPhone: (body.senderData?.sender || '').split('@')[0],
+    text
+  };
+}

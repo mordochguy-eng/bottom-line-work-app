@@ -1,0 +1,53 @@
+async function request(path, options = {}) {
+  const res = await fetch(`/api${path}`, {
+    headers: { 'Content-Type': 'application/json' },
+    ...options
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `שגיאה בבקשה ל-${path}`);
+  return data;
+}
+
+export const api = {
+  getSettings: () => request('/settings'),
+  saveSettings: (patch) => request('/settings', { method: 'POST', body: JSON.stringify(patch) }),
+  getInstanceStatus: () => request('/instance-status'),
+
+  getChats: () => request('/chats'),
+  syncChats: () => request('/chats/sync', { method: 'POST' }),
+  toggleChatTracked: (chat_id, is_tracked) => request('/chats/toggle', { method: 'POST', body: JSON.stringify({ chat_id, is_tracked }) }),
+  toggleChatDigest: (chat_id, include_in_digest) => request('/chats/toggle-digest', { method: 'POST', body: JSON.stringify({ chat_id, include_in_digest }) }),
+  summarizeChat: (chat_id) => request('/chats/summarize', { method: 'POST', body: JSON.stringify({ chat_id }) }),
+  getSummaries: (chatId) => request(`/chats/${encodeURIComponent(chatId)}/summaries`),
+  getLatestSummaries: () => request('/summaries/latest'),
+
+  getActionItems: () => request('/action-items'),
+  toggleActionItem: (id, completed) => request(`/action-items/${id}/toggle`, { method: 'POST', body: JSON.stringify({ completed }) }),
+  toggleActionItemSaved: (id, saved_for_later) => request(`/action-items/${id}/toggle-save`, { method: 'POST', body: JSON.stringify({ saved_for_later }) }),
+
+  getScheduledMessages: () => request('/scheduled-messages'),
+  createScheduledMessage: (msg) => request('/scheduled-messages', { method: 'POST', body: JSON.stringify(msg) }),
+  updateScheduledMessage: (id, patch) => request(`/scheduled-messages/${id}`, { method: 'PUT', body: JSON.stringify(patch) }),
+  deleteScheduledMessage: (id) => request(`/scheduled-messages/${id}`, { method: 'DELETE' }),
+
+  getContacts: () => request('/contacts'),
+  createContact: (contact) => request('/contacts', { method: 'POST', body: JSON.stringify(contact) }),
+  deleteContact: (id) => request(`/contacts/${id}`, { method: 'DELETE' }),
+
+  getFaqs: () => request('/faq'),
+  createFaq: (faq) => request('/faq', { method: 'POST', body: JSON.stringify(faq) }),
+  updateFaq: (id, patch) => request(`/faq/${id}`, { method: 'PUT', body: JSON.stringify(patch) }),
+  deleteFaq: (id) => request(`/faq/${id}`, { method: 'DELETE' }),
+
+  getApprovalQueue: () => request('/approval-queue'),
+  approveQueueItem: (id, editedText) => request(`/approval-queue/${id}/approve`, { method: 'POST', body: JSON.stringify({ editedText }) }),
+  rejectQueueItem: (id) => request(`/approval-queue/${id}/reject`, { method: 'POST' }),
+  toggleAutoReply: (enabled) => request('/auto-reply/toggle', { method: 'POST', body: JSON.stringify({ enabled }) }),
+
+  getSyncConfig: () => request('/sync/config'),
+  getSyncLog: () => request('/sync/log'),
+  runSync: () => request('/sync/run', { method: 'POST' }),
+
+  sendBriefingNow: () => request('/briefing/send', { method: 'POST' }),
+  checkPhone: (phone) => request('/check-phone', { method: 'POST', body: JSON.stringify({ phone }) })
+};
