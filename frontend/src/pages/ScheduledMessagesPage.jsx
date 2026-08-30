@@ -45,7 +45,7 @@ export default function ScheduledMessagesPage() {
   async function load() {
     setLoading(true);
     try {
-      const [m, c, ct] = await Promise.all([api.getScheduledMessages(), api.getChats(), api.getContacts()]);
+      const [m, c, ct] = await Promise.all([api.getScheduledMessages(), api.getChats(), api.getWhatsappContacts()]);
       setMessages(m);
       setChats(c);
       setContacts(ct);
@@ -383,7 +383,23 @@ export default function ScheduledMessagesPage() {
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">מתי לשלוח</label>
-                <input className="form-input" type="datetime-local" value={form.scheduled_at} onChange={(e) => setForm(p => ({ ...p, scheduled_at: e.target.value }))} />
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    className="form-input"
+                    type="date"
+                    dir="ltr"
+                    value={form.scheduled_at.slice(0, 10)}
+                    onChange={(e) => setForm(p => ({ ...p, scheduled_at: `${e.target.value}T${p.scheduled_at.slice(11, 16) || '09:00'}` }))}
+                  />
+                  <input
+                    className="form-input"
+                    type="time"
+                    dir="ltr"
+                    style={{ maxWidth: 120 }}
+                    value={form.scheduled_at.slice(11, 16)}
+                    onChange={(e) => setForm(p => ({ ...p, scheduled_at: `${p.scheduled_at.slice(0, 10) || new Date().toISOString().slice(0, 10)}T${e.target.value}` }))}
+                  />
+                </div>
               </div>
               <div className="form-group">
                 <label className="form-label">חזרה</label>
