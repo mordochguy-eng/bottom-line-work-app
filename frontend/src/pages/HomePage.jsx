@@ -369,7 +369,14 @@ export default function HomePage() {
                             <td>
                               <input type="checkbox" checked={item.completed} onChange={() => handleToggleTaskInModal(item)} style={{ width: 18, height: 18 }} />
                             </td>
-                            <td style={item.completed ? { textDecoration: 'line-through' } : undefined}>{item.task}</td>
+                            <td style={item.completed ? { textDecoration: 'line-through' } : undefined}>
+                              {item.direction && (
+                                <span className="badge badge-warning" style={{ marginLeft: 6, fontSize: '0.7rem' }}>
+                                  {item.direction === 'waiting_on_them' ? '📤 מהם' : '📥 אצלי'}
+                                </span>
+                              )}
+                              {item.task}
+                            </td>
                             <td style={{ whiteSpace: 'nowrap' }}>{item.deadline || '—'}</td>
                             <td style={{ fontSize: '0.78rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{new Date(item.created_at).toLocaleDateString('he-IL')}</td>
                           </tr>

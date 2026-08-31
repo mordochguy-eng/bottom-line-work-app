@@ -262,6 +262,10 @@ export async function insertActionItems(chatId, items) {
     chat_id: chatId,
     task: it.task,
     assignee: it.assignee || '',
+    // 'my_action' (something I need to do/answer) vs 'waiting_on_them'
+    // (I asked and am waiting on their reply) — defaults to my_action since
+    // that's what every action item meant before this field existed.
+    direction: it.direction === 'waiting_on_them' ? 'waiting_on_them' : 'my_action',
     category: it.category || null,
     deadline: it.deadline || null,
     completed: false,
