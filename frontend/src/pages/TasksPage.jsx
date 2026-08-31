@@ -16,6 +16,8 @@ export default function TasksPage() {
   const [scanSegments, setScanSegments] = useState({ namedAndGroups: true, unsavedIndividuals: true });
   const [scanExtractTasks, setScanExtractTasks] = useState(true);
   const [scanStatus, setScanStatus] = useState(null);
+  const [pendingIds, setPendingIds] = useState([]); // ids checked but not yet applied
+  const [applying, setApplying] = useState(false);
   const toast = useToast();
 
   async function load() {
@@ -86,8 +88,23 @@ export default function TasksPage() {
     } catch (err) { toast(err.message, 'error'); }
   }
 
-  async function toggleComplete(item) {
-    try { await api.toggleActionItem(item.id, !item.completed); await load(); } catch (err) { toast(err.message, 'error'); }
+  // Checking a box just marks it "pending" — nothing is sent to the server
+  // until "בצע" is clicked, so checking several rows in a row doesn't fire
+  // an API call (and a toast) per click.
+  function togglePending(id) {
+    setPendingIds(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
+  }
+
+  async function handleApplyPending() {
+    setApplying(true);
+    try {
+      for (const id of pendingIds) {
+        const item = items.find(i => i.id === id);
+        if (item) await api.toggleActionItem(id, !item.completed);
+      }
+      setPendingIds([]);
+      await load();
+    } catch (err) { toast(err.message, 'error'); } finally { setApplying(false); }
   }
 
   async function handleSnooze(item, days) {
@@ -240,12 +257,20 @@ export default function TasksPage() {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 18, alignItems: 'center', flexWrap: 'wrap' }}>
         {[['active', 'פעילות'], ['saved', 'שמורות להמשך'], ['completed', 'בוצעו']].map(([key, label]) => (
           <button key={key} className="btn btn-sm" style={filter === key ? { background: 'var(--accent-primary-glow)', color: 'var(--accent-primary)', borderColor: 'rgba(79,70,229,0.2)' } : {}} onClick={() => setFilter(key)}>
             {label}
           </button>
         ))}
+        {pendingIds.length > 0 && (
+          <>
+            <button className="btn btn-sm btn-success" onClick={handleApplyPending} disabled={applying}>
+              {applying ? 'מבצע...' : `✅ בצע (${pendingIds.length})`}
+            </button>
+            <button className="btn btn-sm" onClick={() => setPendingIds([])} disabled={applying}>✖ נקה בחירה</button>
+          </>
+        )}
       </div>
 
       <div className="glass-card">
@@ -278,7 +303,11 @@ export default function TasksPage() {
                     <td className="row-id">#{item.id}</td>
                     <td style={item.completed ? { textDecoration: 'line-through', color: 'var(--text-muted)' } : {}}>{item.task}</td>
                     <td>{item.category ? <span className="badge badge-info">{item.category}</span> : '—'}</td>
-                    <td>{chatName(item.chat_id)}</td>
+                    <td>
+                      {item.chat_id?.endsWith('@c.us') && chatName(item.chat_id) === item.chat_id
+                        ? `שיחה עם ${item.assignee || item.chat_id}`
+                        : chatName(item.chat_id)}
+                    </td>
                     <td>{item.assignee || '—'}</td>
                     <td>
                       <input
@@ -304,7 +333,12 @@ export default function TasksPage() {
                     </td>
                     <td style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{new Date(item.created_at).toLocaleString('he-IL')}</td>
                     <td>
-                      <input type="checkbox" checked={item.completed} onChange={() => toggleComplete(item)} style={{ width: 18, height: 18 }} />
+                      <input
+                        type="checkbox"
+                        checked={pendingIds.includes(item.id) ? !item.completed : item.completed}
+                        onChange={() => togglePending(item.id)}
+                        style={{ width: 18, height: 18, outline: pendingIds.includes(item.id) ? '2px solid var(--accent-warning)' : 'none' }}
+                      />
                     </td>
                     <td>
                       {!item.completed && (
