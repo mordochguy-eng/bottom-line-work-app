@@ -102,9 +102,22 @@ export default function TasksPage() {
     try { await api.toggleActionItemSaved(item.id, false); await load(); } catch (err) { toast(err.message, 'error'); }
   }
 
+  // A manually-typed 2-digit year (e.g. "26") comes back from the native
+  // date input zero-padded as "0026" — treat anything under 100 as a
+  // shorthand for the 2000s rather than a literal year 26 AD.
+  function normalizeDeadlineYear(value) {
+    if (!value) return value;
+    const [y, m, d] = value.split('-');
+    if (!y || !m || !d) return value;
+    const year = parseInt(y, 10);
+    if (year >= 100) return value;
+    return `${year + 2000}-${m}-${d}`;
+  }
+
   async function handleDeadlineChange(item, value) {
     try {
-      const updated = await api.setActionItemDeadline(item.id, value || null);
+      const normalized = normalizeDeadlineYear(value);
+      const updated = await api.setActionItemDeadline(item.id, normalized || null);
       setItems(prev => prev.map(i => (i.id === item.id ? updated : i)));
     } catch (err) { toast(err.message, 'error'); }
   }
@@ -253,7 +266,7 @@ export default function TasksPage() {
                   <SortTh label="קטגוריה" sortKey="category" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
                   <SortTh label="קבוצה / מקור" sortKey="chat_id" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
                   <SortTh label="אחראי" sortKey="assignee" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
-                  <SortTh label="יעד" sortKey="deadline" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
+                  <SortTh label="תאריך ביצוע" sortKey="deadline" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
                   <SortTh label="נוצר" sortKey="created_at" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
                   <th>סטטוס</th>
                   <th></th>

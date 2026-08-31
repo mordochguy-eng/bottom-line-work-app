@@ -114,21 +114,57 @@ refreshWhatsappContactsCache().catch(err => console.error('[startup] whatsapp-co
 app.post('/api/chats/toggle', async (req, res) => {
   try {
     const { chat_id, is_tracked } = req.body;
-    res.json(await db.updateChat(chat_id, { is_tracked }));
+    const chats = await db.getChats();
+    const chat = chats.find(c => c.chat_id === chat_id);
+    const prevValue = !!chat?.is_tracked;
+    const updated = await db.updateChat(chat_id, { is_tracked });
+    if (chat && prevValue !== !!is_tracked) {
+      await db.addActivityLog({
+        type: 'chat_tracked',
+        description: `${is_tracked ? 'התחלת מעקב אחרי קבוצה' : 'הפסקת מעקב אחרי קבוצה'}: "${chat.name}"`,
+        action: 'update', file: 'chats.json', id_field: 'chat_id', entity_id: chat_id,
+        field: 'is_tracked', prev_value: prevValue, new_value: !!is_tracked
+      });
+    }
+    res.json(updated);
   } catch (error) { handleError(res, error); }
 });
 
 app.post('/api/chats/toggle-digest', async (req, res) => {
   try {
     const { chat_id, include_in_digest } = req.body;
-    res.json(await db.updateChat(chat_id, { include_in_digest }));
+    const chats = await db.getChats();
+    const chat = chats.find(c => c.chat_id === chat_id);
+    const prevValue = !!chat?.include_in_digest;
+    const updated = await db.updateChat(chat_id, { include_in_digest });
+    if (chat && prevValue !== !!include_in_digest) {
+      await db.addActivityLog({
+        type: 'chat_digest',
+        description: `${include_in_digest ? 'הפעלת' : 'כיבוי'} שליחת סיכום יומי לקבוצה: "${chat.name}"`,
+        action: 'update', file: 'chats.json', id_field: 'chat_id', entity_id: chat_id,
+        field: 'include_in_digest', prev_value: prevValue, new_value: !!include_in_digest
+      });
+    }
+    res.json(updated);
   } catch (error) { handleError(res, error); }
 });
 
 app.post('/api/chats/category', async (req, res) => {
   try {
     const { chat_id, category } = req.body;
-    res.json(await db.updateChat(chat_id, { profile_type: category }));
+    const chats = await db.getChats();
+    const chat = chats.find(c => c.chat_id === chat_id);
+    const prevValue = chat?.profile_type || null;
+    const updated = await db.updateChat(chat_id, { profile_type: category });
+    if (chat && prevValue !== category) {
+      await db.addActivityLog({
+        type: 'chat_category',
+        description: `שינוי סוג קבוצה: "${chat.name}" ל-${category}`,
+        action: 'update', file: 'chats.json', id_field: 'chat_id', entity_id: chat_id,
+        field: 'profile_type', prev_value: prevValue, new_value: category
+      });
+    }
+    res.json(updated);
   } catch (error) { handleError(res, error); }
 });
 
@@ -269,7 +305,24 @@ app.put('/api/scheduled-messages/:id', async (req, res) => {
   try {
     const settings = await db.getSettings();
     if (workerProxy.isWorkerConfigured(settings)) return res.json(await workerProxy.updateMessage(settings, Number(req.params.id), req.body));
-    res.json(await db.updateScheduledMessage(Number(req.params.id), req.body));
+    const id = Number(req.params.id);
+    // Undo support only exists for the local (non-Worker) store, since only
+    // there can a previous value actually be read back and restored.
+    const before = (await db.getScheduledMessages()).find(m => m.id === id);
+    const updated = await db.updateScheduledMessage(id, req.body);
+    if (before) {
+      const keys = Object.keys(req.body);
+      const prevValues = Object.fromEntries(keys.map(k => [k, before[k]]));
+      const changed = keys.some(k => before[k] !== updated[k]);
+      if (changed) {
+        await db.addActivityLog({
+          type: 'scheduled_message_edited',
+          description: `עריכת הודעה מתוזמנת: "${(before.content || before.display_name || before.chat_id || '').toString().slice(0, 60)}"`,
+          action: 'update_multi', file: 'scheduled_messages.json', entity_id: id, prev_values: prevValues
+        });
+      }
+    }
+    res.json(updated);
   } catch (error) { handleError(res, error); }
 });
 
@@ -277,7 +330,16 @@ app.delete('/api/scheduled-messages/:id', async (req, res) => {
   try {
     const settings = await db.getSettings();
     if (workerProxy.isWorkerConfigured(settings)) { await workerProxy.deleteMessage(settings, Number(req.params.id)); return res.json({ ok: true }); }
-    await db.deleteScheduledMessage(Number(req.params.id));
+    const id = Number(req.params.id);
+    const record = (await db.getScheduledMessages()).find(m => m.id === id);
+    await db.deleteScheduledMessage(id);
+    if (record) {
+      await db.addActivityLog({
+        type: 'scheduled_message_deleted',
+        description: `מחיקת הודעה מתוזמנת: "${(record.content || record.display_name || record.chat_id || '').toString().slice(0, 60)}"`,
+        action: 'delete', file: 'scheduled_messages.json', entity_id: id, record
+      });
+    }
     res.json({ ok: true });
   } catch (error) { handleError(res, error); }
 });
@@ -322,7 +384,19 @@ app.post('/api/contacts', async (req, res) => {
 });
 
 app.delete('/api/contacts/:id', async (req, res) => {
-  try { await db.deleteContact(Number(req.params.id)); res.json({ ok: true }); } catch (error) { handleError(res, error); }
+  try {
+    const id = Number(req.params.id);
+    const record = (await db.getContacts()).find(c => c.id === id);
+    await db.deleteContact(id);
+    if (record) {
+      await db.addActivityLog({
+        type: 'contact_deleted',
+        description: `הסרת איש קשר מאושר למענה אוטומטי: "${record.name}"`,
+        action: 'delete', file: 'contacts.json', entity_id: id, record
+      });
+    }
+    res.json({ ok: true });
+  } catch (error) { handleError(res, error); }
 });
 
 app.get('/api/faq', async (req, res) => {
@@ -334,11 +408,39 @@ app.post('/api/faq', async (req, res) => {
 });
 
 app.put('/api/faq/:id', async (req, res) => {
-  try { res.json(await db.updateFaq(Number(req.params.id), req.body)); } catch (error) { handleError(res, error); }
+  try {
+    const id = Number(req.params.id);
+    const before = (await db.getFaqs()).find(f => f.id === id);
+    const updated = await db.updateFaq(id, req.body);
+    if (before) {
+      const keys = Object.keys(req.body);
+      const prevValues = Object.fromEntries(keys.map(k => [k, before[k]]));
+      if (keys.some(k => before[k] !== updated[k])) {
+        await db.addActivityLog({
+          type: 'faq_edited',
+          description: `עריכת שאלה נפוצה: "${(before.question || '').slice(0, 60)}"`,
+          action: 'update_multi', file: 'faq.json', entity_id: id, prev_values: prevValues
+        });
+      }
+    }
+    res.json(updated);
+  } catch (error) { handleError(res, error); }
 });
 
 app.delete('/api/faq/:id', async (req, res) => {
-  try { await db.deleteFaq(Number(req.params.id)); res.json({ ok: true }); } catch (error) { handleError(res, error); }
+  try {
+    const id = Number(req.params.id);
+    const record = (await db.getFaqs()).find(f => f.id === id);
+    await db.deleteFaq(id);
+    if (record) {
+      await db.addActivityLog({
+        type: 'faq_deleted',
+        description: `מחיקת שאלה נפוצה: "${(record.question || '').slice(0, 60)}"`,
+        action: 'delete', file: 'faq.json', entity_id: id, record
+      });
+    }
+    res.json({ ok: true });
+  } catch (error) { handleError(res, error); }
 });
 
 app.get('/api/approval-queue', async (req, res) => {
@@ -406,6 +508,19 @@ app.post('/api/history-scan/start', (req, res) => {
 
 app.get('/api/history-scan/status', (req, res) => {
   res.json(getScanStatus());
+});
+
+// ---------- Activity log (undoable user actions) ----------
+app.get('/api/activity-log', async (req, res) => {
+  try { res.json(await db.getActivityLog()); } catch (error) { handleError(res, error); }
+});
+
+app.post('/api/activity-log/:id/undo', async (req, res) => {
+  try {
+    const result = await db.undoActivityLogEntry(Number(req.params.id));
+    if (!result.success) return res.status(400).json({ error: result.message });
+    res.json(result);
+  } catch (error) { handleError(res, error); }
 });
 
 // ---------- Sync ----------

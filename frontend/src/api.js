@@ -56,6 +56,9 @@ export const api = {
   startHistoryScan: (opts) => request('/history-scan/start', { method: 'POST', body: JSON.stringify(opts) }),
   getHistoryScanStatus: () => request('/history-scan/status'),
 
+  getActivityLog: () => request('/activity-log'),
+  undoActivityLogEntry: (id) => request(`/activity-log/${id}/undo`, { method: 'POST' }),
+
   getSyncConfig: () => request('/sync/config'),
   getSyncLog: () => request('/sync/log'),
   runSync: () => request('/sync/run', { method: 'POST' }),
