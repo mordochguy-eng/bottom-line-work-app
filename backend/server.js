@@ -168,6 +168,13 @@ app.post('/api/chats/category', async (req, res) => {
   } catch (error) { handleError(res, error); }
 });
 
+// Marks a chat as viewed (opened its detail modal) — used by the home feed
+// to know whether its latest summary is "new since you last looked", not
+// logged to the activity log since it's passive state, not a user action.
+app.post('/api/chats/:chatId/viewed', async (req, res) => {
+  try { res.json(await db.updateChat(req.params.chatId, { last_viewed_at: new Date().toISOString() })); } catch (error) { handleError(res, error); }
+});
+
 app.post('/api/chats/summarize', async (req, res) => {
   try {
     const { chat_id } = req.body;

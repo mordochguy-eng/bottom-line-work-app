@@ -47,6 +47,15 @@ export default function HomePage() {
   const tracked = chats.filter(c => c.is_tracked);
   const summaryByChatId = Object.fromEntries(summaries.map(s => [s.chat_id, s]));
   const openCount = (chatId) => actionItems.filter(a => a.chat_id === chatId && !a.completed).length;
+  // A group "has an update" when its latest summary is newer than the last
+  // time you opened its detail modal — not just "was summarized recently",
+  // so it stops standing out the moment you've actually looked at it.
+  function hasUpdate(chat) {
+    const summary = summaryByChatId[chat.chat_id];
+    if (!summary) return false;
+    if (!chat.last_viewed_at) return true;
+    return new Date(summary.created_at) > new Date(chat.last_viewed_at);
+  }
 
   async function handleSummarizeOne(chatId) {
     setCardBusy(p => ({ ...p, [chatId]: 'summarizing' }));
@@ -95,6 +104,11 @@ export default function HomePage() {
       const [s, m] = await Promise.all([api.getSummaries(chat.chat_id), api.getChatMessages(chat.chat_id)]);
       setDetailSummaries(s);
       setDetailMessages(m);
+      // Marks the "has a new update" highlight as read — fire-and-forget,
+      // the modal itself shouldn't wait on it.
+      api.markChatViewed(chat.chat_id)
+        .then(updatedChat => setChats(prev => prev.map(c => (c.chat_id === chat.chat_id ? updatedChat : c))))
+        .catch(() => {});
     } catch (err) { toast(err.message, 'error'); } finally { setDetailLoading(false); }
   }
 
@@ -171,9 +185,10 @@ export default function HomePage() {
     const summary = summaryByChatId[chat.chat_id];
     const cat = CATEGORIES[chat.profile_type] || CATEGORIES.general;
     const busy = cardBusy[chat.chat_id];
+    const updated = hasUpdate(chat);
 
     return (
-      <div key={chat.chat_id} className="glass-card">
+      <div key={chat.chat_id} className="glass-card" style={updated ? { borderRight: '4px solid var(--accent-warning)', background: 'rgba(180, 83, 9, 0.04)' } : undefined}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10, gap: 8 }}>
           <strong
             style={{ fontSize: '1.05rem', cursor: 'pointer' }}
@@ -183,6 +198,7 @@ export default function HomePage() {
             {chat.name}
           </strong>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {updated && <span className="badge badge-warning">🆕 עדכון חדש</span>}
             <span className={`badge ${cat.badge}`}>{cat.icon} {cat.label}</span>
             {openCount(chat.chat_id) > 0 && <span className="badge badge-danger">{openCount(chat.chat_id)} משימות</span>}
           </div>
@@ -242,7 +258,12 @@ export default function HomePage() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
           {CATEGORY_ORDER.map(key => {
-            const inCategory = tracked.filter(c => (c.profile_type || 'general') === key);
+            // Groups with a new update float to the top of their own
+            // category — never across categories, so the existing
+            // customer/distribution/info grouping stays intact.
+            const inCategory = tracked
+              .filter(c => (c.profile_type || 'general') === key)
+              .sort((a, b) => (hasUpdate(b) ? 1 : 0) - (hasUpdate(a) ? 1 : 0));
             if (inCategory.length === 0) return null;
             const cat = CATEGORIES[key];
             return (

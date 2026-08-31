@@ -19,6 +19,7 @@ export const api = {
   toggleChatTracked: (chat_id, is_tracked) => request('/chats/toggle', { method: 'POST', body: JSON.stringify({ chat_id, is_tracked }) }),
   toggleChatDigest: (chat_id, include_in_digest) => request('/chats/toggle-digest', { method: 'POST', body: JSON.stringify({ chat_id, include_in_digest }) }),
   setChatCategory: (chat_id, category) => request('/chats/category', { method: 'POST', body: JSON.stringify({ chat_id, category }) }),
+  markChatViewed: (chatId) => request(`/chats/${encodeURIComponent(chatId)}/viewed`, { method: 'POST' }),
   summarizeChat: (chat_id) => request('/chats/summarize', { method: 'POST', body: JSON.stringify({ chat_id }) }),
   sendChatDigest: (chat_id, summary_id) => request('/chats/send-digest', { method: 'POST', body: JSON.stringify({ chat_id, summary_id }) }),
   getSummaries: (chatId) => request(`/chats/${encodeURIComponent(chatId)}/summaries`),
