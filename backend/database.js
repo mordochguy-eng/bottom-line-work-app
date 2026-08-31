@@ -131,6 +131,20 @@ export async function getMessagesForChat(chatId) {
   const all = await readJson('messages.json', []);
   return all.filter(m => m.chat_id === chatId).sort((a, b) => a.timestamp - b.timestamp);
 }
+export async function getMessageById(messageId) {
+  const all = await readJson('messages.json', []);
+  return all.find(m => m.message_id === messageId) || null;
+}
+// Overwrites a message's body in place — used after transcription/OCR fills
+// in real text for a voice note or image that was stored as a placeholder.
+export async function updateMessageBody(messageId, body) {
+  const all = await readJson('messages.json', []);
+  const idx = all.findIndex(m => m.message_id === messageId);
+  if (idx === -1) throw new Error('Message not found');
+  all[idx].body = body;
+  await writeJson('messages.json', all);
+  return all[idx];
+}
 export async function clearMessagesForChat(chatId) {
   const all = await readJson('messages.json', []);
   const kept = all.filter(m => m.chat_id !== chatId);

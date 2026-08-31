@@ -20,12 +20,12 @@ function cleanAndParseJSON(text) {
 
 const FALLBACK_MODELS = ['gemini-3.1-flash-lite', 'gemini-2.5-flash'];
 
-async function callGemini(apiKey, model, systemInstruction, prompt, responseJson = false) {
+async function callGemini(apiKey, model, systemInstruction, prompt, responseJson = false, inlineDataParts = []) {
   const chain = [model, ...FALLBACK_MODELS.filter(m => m !== model)];
   let lastError = null;
   for (const m of chain) {
     try {
-      return await callGeminiModel(apiKey, m, systemInstruction, prompt, responseJson);
+      return await callGeminiModel(apiKey, m, systemInstruction, prompt, responseJson, inlineDataParts);
     } catch (err) {
       lastError = err;
       const overloaded = /high demand|overloaded|UNAVAILABLE|503/i.test(err.message);
@@ -36,10 +36,10 @@ async function callGemini(apiKey, model, systemInstruction, prompt, responseJson
   throw lastError;
 }
 
-async function callGeminiModel(apiKey, model, systemInstruction, prompt, responseJson) {
+async function callGeminiModel(apiKey, model, systemInstruction, prompt, responseJson, inlineDataParts = []) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
   const payload = {
-    contents: [{ parts: [{ text: prompt }] }],
+    contents: [{ parts: [{ text: prompt }, ...inlineDataParts] }],
     generationConfig: responseJson ? { responseMimeType: 'application/json' } : {}
   };
   if (systemInstruction) payload.systemInstruction = { parts: [{ text: systemInstruction }] };
@@ -180,6 +180,20 @@ export async function askGeminiAboutChat(apiKey, chatName, transcript, question,
   const prompt = `תמליל מלא של קבוצת הוואטסאפ "${chatName}":\n"""\n${transcript}\n"""\n\n${historyPrompt}שאלת המשתמש:\n"${question}"\n\nענה בעברית, מבוסס אך ורק על התמליל שלמעלה.`;
 
   return callGemini(apiKey, 'gemini-3.5-flash', systemInstruction, prompt, false);
+}
+
+export async function transcribeVoiceMessage(apiKey, audioBase64, mimeType = 'audio/ogg') {
+  const systemInstruction = 'אתה שירות תמלול קול לעברית מקצועי. תמלל את השמע בדיוק כפי שנאמר. אל תוסיף הערות, כותרות או תגובות — רק את הטקסט המתומלל עצמו.';
+  const prompt = 'תמלל את ההודעה הקולית הזו בעברית.';
+  const inlineDataParts = [{ inlineData: { mimeType, data: audioBase64 } }];
+  return callGemini(apiKey, 'gemini-3.1-flash-lite', systemInstruction, prompt, false, inlineDataParts);
+}
+
+export async function ocrImage(apiKey, imageBase64, mimeType = 'image/jpeg') {
+  const systemInstruction = 'אתה שירות OCR מתקדם לעברית ואנגלית. חלץ את כל הטקסט, התאריכים, הטבלאות והרשימות מהתמונה, ושמור על מבנה קרוב ככל האפשר למקור. החזר רק את הטקסט שחולץ.';
+  const prompt = 'חלץ את כל הטקסט והפרטים הכתובים בתמונה הזו.';
+  const inlineDataParts = [{ inlineData: { mimeType, data: imageBase64 } }];
+  return callGemini(apiKey, 'gemini-3.1-flash-lite', systemInstruction, prompt, false, inlineDataParts);
 }
 
 /**

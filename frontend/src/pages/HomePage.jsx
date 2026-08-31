@@ -13,7 +13,15 @@ export default function HomePage() {
   const [globalSummarizing, setGlobalSummarizing] = useState(false);
   const [globalProgress, setGlobalProgress] = useState(null);
 
-  const [askChat, setAskChat] = useState(null); // the chat object currently open in the ask modal
+  // Group detail modal — one modal, four tabs (mirrors the personal dashboard).
+  const [detailChat, setDetailChat] = useState(null);
+  const [detailTab, setDetailTab] = useState('summaries');
+  const [detailSummaries, setDetailSummaries] = useState([]);
+  const [detailMessages, setDetailMessages] = useState([]);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailBusy, setDetailBusy] = useState(null); // 'summarizing' | 'sending:<id>'
+  const [mediaBusy, setMediaBusy] = useState({}); // message_id -> 'transcribe' | 'ocr'
+
   const [askMessages, setAskMessages] = useState([]);
   const [askInput, setAskInput] = useState('');
   const [asking, setAsking] = useState(false);
@@ -77,22 +85,79 @@ export default function HomePage() {
     toast(`סוכמו ${ok}/${tracked.length} קבוצות`, 'success');
   }
 
-  function openAsk(chat) {
-    setAskChat(chat);
+  async function openDetail(chat, tab = 'summaries') {
+    setDetailChat(chat);
+    setDetailTab(tab);
     setAskMessages([]);
     setAskInput('');
+    setDetailLoading(true);
+    try {
+      const [s, m] = await Promise.all([api.getSummaries(chat.chat_id), api.getChatMessages(chat.chat_id)]);
+      setDetailSummaries(s);
+      setDetailMessages(m);
+    } catch (err) { toast(err.message, 'error'); } finally { setDetailLoading(false); }
+  }
+
+  function closeDetail() {
+    setDetailChat(null);
+  }
+
+  async function handleSummarizeInModal() {
+    setDetailBusy('summarizing');
+    try {
+      await api.summarizeChat(detailChat.chat_id);
+      const [s, m] = await Promise.all([api.getSummaries(detailChat.chat_id), api.getChatMessages(detailChat.chat_id)]);
+      setDetailSummaries(s);
+      setDetailMessages(m);
+      await load();
+      toast('הסיכום הופק בהצלחה', 'success');
+    } catch (err) { toast(err.message, 'error'); } finally { setDetailBusy(null); }
+  }
+
+  async function handleSendSpecificSummary(summaryId) {
+    setDetailBusy(`sending:${summaryId}`);
+    try {
+      await api.sendChatDigest(detailChat.chat_id, summaryId);
+      const s = await api.getSummaries(detailChat.chat_id);
+      setDetailSummaries(s);
+      await load();
+      toast('הסיכום נשלח לוואטסאפ', 'success');
+    } catch (err) { toast(err.message, 'error'); } finally { setDetailBusy(null); }
+  }
+
+  async function handleToggleTaskInModal(item) {
+    try {
+      await api.toggleActionItem(item.id, !item.completed);
+      await load();
+    } catch (err) { toast(err.message, 'error'); }
+  }
+
+  async function handleTranscribe(msg) {
+    setMediaBusy(p => ({ ...p, [msg.message_id]: 'transcribe' }));
+    try {
+      const updated = await api.transcribeMessage(msg.message_id);
+      setDetailMessages(prev => prev.map(m => (m.message_id === msg.message_id ? updated : m)));
+    } catch (err) { toast(err.message, 'error'); } finally { setMediaBusy(p => ({ ...p, [msg.message_id]: null })); }
+  }
+
+  async function handleOcr(msg) {
+    setMediaBusy(p => ({ ...p, [msg.message_id]: 'ocr' }));
+    try {
+      const updated = await api.ocrMessage(msg.message_id);
+      setDetailMessages(prev => prev.map(m => (m.message_id === msg.message_id ? updated : m)));
+    } catch (err) { toast(err.message, 'error'); } finally { setMediaBusy(p => ({ ...p, [msg.message_id]: null })); }
   }
 
   async function handleAsk(e) {
     e.preventDefault();
     const question = askInput.trim();
-    if (!question || !askChat) return;
+    if (!question || !detailChat) return;
     const historyForBackend = askMessages.map(m => ({ role: m.role, text: m.text }));
     setAskMessages(m => [...m, { role: 'user', text: question }]);
     setAskInput('');
     setAsking(true);
     try {
-      const res = await api.askAboutChat(askChat.chat_id, question, historyForBackend);
+      const res = await api.askAboutChat(detailChat.chat_id, question, historyForBackend);
       setAskMessages(m => [...m, { role: 'assistant', text: res.answer }]);
     } catch (err) {
       toast(err.message, 'error');
@@ -110,7 +175,13 @@ export default function HomePage() {
     return (
       <div key={chat.chat_id} className="glass-card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10, gap: 8 }}>
-          <strong style={{ fontSize: '1.05rem' }}>{chat.name}</strong>
+          <strong
+            style={{ fontSize: '1.05rem', cursor: 'pointer' }}
+            onClick={() => openDetail(chat, 'summaries')}
+            title="פתח פרטי קבוצה"
+          >
+            {chat.name}
+          </strong>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             <span className={`badge ${cat.badge}`}>{cat.icon} {cat.label}</span>
             {openCount(chat.chat_id) > 0 && <span className="badge badge-danger">{openCount(chat.chat_id)} משימות</span>}
@@ -132,7 +203,7 @@ export default function HomePage() {
         )}
 
         <div style={{ display: 'flex', gap: 8, borderTop: '1px solid var(--border-color)', paddingTop: 12 }}>
-          <button className="btn btn-sm" style={{ flexGrow: 1 }} onClick={() => openAsk(chat)}>💬 שאל</button>
+          <button className="btn btn-sm" style={{ flexGrow: 1 }} onClick={() => openDetail(chat, 'ask')}>💬 שאל</button>
           <button className="btn btn-sm btn-primary" style={{ flexGrow: 1 }} onClick={() => handleSummarizeOne(chat.chat_id)} disabled={!!busy}>
             {busy === 'summarizing' ? 'מסכם...' : '📝 סכם עכשיו'}
           </button>
@@ -147,6 +218,9 @@ export default function HomePage() {
   }
 
   if (loading) return <div className="empty-state">טוען...</div>;
+
+  const detailTasks = detailChat ? actionItems.filter(a => a.chat_id === detailChat.chat_id).sort((a, b) => (a.completed - b.completed) || (b.id - a.id)) : [];
+  const detailMedia = detailMessages.filter(m => m.type === 'audio' || m.type === 'image');
 
   return (
     <>
@@ -186,45 +260,184 @@ export default function HomePage() {
         </div>
       )}
 
-      {askChat && (
-        <Modal title={`💬 שאל על "${askChat.name}"`} onClose={() => setAskChat(null)}>
-          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: 14 }}>
-            שאל כל שאלה על תוכן הקבוצה — המערכת קוראת את ההודעות האחרונות ועונה בהתבסס עליהן בלבד.
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 320, overflowY: 'auto', marginBottom: 14 }}>
-            {askMessages.length === 0 && (
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>לדוגמה: "מה סוכם לגבי התשלום?" או "מי התנדב למשימה?"</p>
-            )}
-            {askMessages.map((m, i) => (
-              <div
-                key={i}
-                style={{
-                  alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
-                  maxWidth: '85%',
-                  background: m.role === 'user' ? 'var(--accent-primary)' : '#fff',
-                  color: m.role === 'user' ? '#fff' : 'var(--text-primary)',
-                  border: m.role === 'user' ? 'none' : '1px solid var(--border-color)',
-                  borderRadius: 12,
-                  padding: '10px 14px',
-                  fontSize: '0.9rem',
-                  whiteSpace: 'pre-wrap'
-                }}
-              >
-                {m.text}
-              </div>
-            ))}
-            {asking && <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>חושב...</div>}
+      {detailChat && (
+        <Modal title={detailChat.name} onClose={closeDetail} maxWidth={900}>
+          <div className="type-btn-group" style={{ marginBottom: 18 }}>
+            <button className={`type-btn ${detailTab === 'summaries' ? 'active' : ''}`} onClick={() => setDetailTab('summaries')}>
+              📝 סיכומים ({detailSummaries.length})
+            </button>
+            <button className={`type-btn ${detailTab === 'tasks' ? 'active' : ''}`} onClick={() => setDetailTab('tasks')}>
+              📋 משימות ({detailTasks.length})
+            </button>
+            <button className={`type-btn ${detailTab === 'media' ? 'active' : ''}`} onClick={() => setDetailTab('media')}>
+              🎙️ הודעות מולטימדיה / קוליות
+            </button>
+            <button className={`type-btn ${detailTab === 'ask' ? 'active' : ''}`} onClick={() => setDetailTab('ask')}>
+              💬 שאל על הקבוצה
+            </button>
           </div>
-          <form onSubmit={handleAsk} style={{ display: 'flex', gap: 8 }}>
-            <input
-              className="form-input"
-              placeholder="הקלד שאלה על הקבוצה..."
-              value={askInput}
-              onChange={(e) => setAskInput(e.target.value)}
-              disabled={asking}
-            />
-            <button className="btn btn-primary" type="submit" disabled={asking || !askInput.trim()}>שלח</button>
-          </form>
+
+          {detailLoading ? (
+            <div className="empty-state">טוען...</div>
+          ) : (
+            <>
+              {detailTab === 'summaries' && (
+                <div>
+                  {detailSummaries.length === 0 ? (
+                    <div className="empty-state">
+                      <p>אין סיכומים עבור קבוצה זו עדיין.</p>
+                      <button className="btn btn-primary" style={{ marginTop: 14 }} onClick={handleSummarizeInModal} disabled={detailBusy === 'summarizing'}>
+                        {detailBusy === 'summarizing' ? 'מסכם...' : 'סכם עכשיו'}
+                      </button>
+                    </div>
+                  ) : (
+                    detailSummaries.map((sum, index) => (
+                      <div key={sum.id} className="glass-card" style={{ marginBottom: 16, borderRight: index === 0 ? '4px solid var(--accent-primary)' : '1px solid var(--border-color)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, borderBottom: '1px solid var(--border-color)', paddingBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+                          <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>
+                            תאריך סיכום: {new Date(sum.created_at).toLocaleString('he-IL')}
+                            {index === 0 && <span className="badge badge-info" style={{ marginRight: 8 }}>הכי חדש</span>}
+                          </span>
+                          <button
+                            className="btn btn-sm btn-success"
+                            onClick={() => handleSendSpecificSummary(sum.id)}
+                            disabled={detailBusy === `sending:${sum.id}`}
+                          >
+                            {detailBusy === `sending:${sum.id}` ? 'שולח...' : '✉️ שלח סיכום זה לוואטסאפ שלי'}
+                          </button>
+                        </div>
+                        <p style={{ lineHeight: 1.6, marginBottom: 16 }}><strong>תקציר מנהלים:</strong> {sum.content.summary}</p>
+                        {sum.content.topics?.length > 0 && (
+                          <div>
+                            <h4 style={{ fontSize: '0.9rem', fontWeight: 700, borderBottom: '1px solid var(--border-color)', paddingBottom: 6, marginBottom: 10 }}>נושאים מרכזיים</h4>
+                            {sum.content.topics.map((t, idx) => (
+                              <div key={idx} style={{ marginBottom: 10 }}>
+                                <div style={{ fontWeight: 600, fontSize: '0.88rem', marginBottom: 4 }}>{t.topic}</div>
+                                <ul style={{ margin: 0, paddingRight: 20, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                                  {t.bullets?.map((b, bIdx) => <li key={bIdx}>{b}</li>)}
+                                </ul>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+
+              {detailTab === 'tasks' && (
+                <div style={{ overflowX: 'auto' }}>
+                  {detailTasks.length === 0 ? (
+                    <div className="empty-state"><p>אין משימות לקבוצה זו.</p></div>
+                  ) : (
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>#</th>
+                          <th>סטטוס</th>
+                          <th>המשימה</th>
+                          <th>תאריך ביצוע</th>
+                          <th>נוצר</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {detailTasks.map(item => (
+                          <tr key={item.id} style={item.completed ? { opacity: 0.6 } : undefined}>
+                            <td className="row-id">#{item.id}</td>
+                            <td>
+                              <input type="checkbox" checked={item.completed} onChange={() => handleToggleTaskInModal(item)} style={{ width: 18, height: 18 }} />
+                            </td>
+                            <td style={item.completed ? { textDecoration: 'line-through' } : undefined}>{item.task}</td>
+                            <td style={{ whiteSpace: 'nowrap' }}>{item.deadline || '—'}</td>
+                            <td style={{ fontSize: '0.78rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{new Date(item.created_at).toLocaleDateString('he-IL')}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
+
+              {detailTab === 'media' && (
+                <div>
+                  <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', marginBottom: 16 }}>
+                    הודעות קוליות ותמונות מאז הסיכום האחרון. אפשר לתמלל/לקרוא טקסט מתוכן בלחיצת כפתור.
+                  </p>
+                  {detailMedia.length === 0 ? (
+                    <div className="empty-state"><p>לא נמצאו הודעות קוליות או תמונות לאחרונה.</p></div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {detailMedia.map(msg => {
+                        const busy = mediaBusy[msg.message_id];
+                        return (
+                          <div key={msg.message_id} className="glass-card" style={{ padding: 14 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, flexWrap: 'wrap', gap: 6 }}>
+                              <strong style={{ fontSize: '0.88rem' }}>{msg.sender_name}</strong>
+                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{new Date(msg.timestamp * 1000).toLocaleString('he-IL')}</span>
+                            </div>
+                            <p style={{ fontSize: '0.88rem', whiteSpace: 'pre-wrap', marginBottom: 10 }}>{msg.body}</p>
+                            {msg.type === 'audio' && (
+                              <button className="btn btn-sm btn-primary" onClick={() => handleTranscribe(msg)} disabled={!!busy}>
+                                {busy === 'transcribe' ? '🎙️ מתמלל...' : '🎙️ תמלל קולית'}
+                              </button>
+                            )}
+                            {msg.type === 'image' && (
+                              <button className="btn btn-sm btn-primary" onClick={() => handleOcr(msg)} disabled={!!busy}>
+                                {busy === 'ocr' ? '🔍 קורא תמונה...' : '📷 קרא טקסט מהתמונה'}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {detailTab === 'ask' && (
+                <div>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: 14 }}>
+                    שאל כל שאלה על תוכן הקבוצה — המערכת קוראת את ההודעות האחרונות ועונה בהתבסס עליהן בלבד.
+                  </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 320, overflowY: 'auto', marginBottom: 14 }}>
+                    {askMessages.length === 0 && (
+                      <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>לדוגמה: "מה סוכם לגבי התשלום?" או "מי התנדב למשימה?"</p>
+                    )}
+                    {askMessages.map((m, i) => (
+                      <div
+                        key={i}
+                        style={{
+                          alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
+                          maxWidth: '85%',
+                          background: m.role === 'user' ? 'var(--accent-primary)' : '#fff',
+                          color: m.role === 'user' ? '#fff' : 'var(--text-primary)',
+                          border: m.role === 'user' ? 'none' : '1px solid var(--border-color)',
+                          borderRadius: 12,
+                          padding: '10px 14px',
+                          fontSize: '0.9rem',
+                          whiteSpace: 'pre-wrap'
+                        }}
+                      >
+                        {m.text}
+                      </div>
+                    ))}
+                    {asking && <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>חושב...</div>}
+                  </div>
+                  <form onSubmit={handleAsk} style={{ display: 'flex', gap: 8 }}>
+                    <input
+                      className="form-input"
+                      placeholder="הקלד שאלה על הקבוצה..."
+                      value={askInput}
+                      onChange={(e) => setAskInput(e.target.value)}
+                      disabled={asking}
+                    />
+                    <button className="btn btn-primary" type="submit" disabled={asking || !askInput.trim()}>שלח</button>
+                  </form>
+                </div>
+              )}
+            </>
+          )}
         </Modal>
       )}
     </>

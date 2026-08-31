@@ -224,18 +224,57 @@ app.get('/api/summaries/latest', async (req, res) => {
 // this never re-summarizes, so it's safe to click right after "סכם עכשיו".
 app.post('/api/chats/send-digest', async (req, res) => {
   try {
-    const { chat_id } = req.body;
+    const { chat_id, summary_id } = req.body;
     const settings = await db.getSettings();
     if (!settings.recipientChatId) throw new Error('לא הוגדר יעד לשליחת סיכומים בהגדרות');
     const chats = await db.getChats();
     const chat = chats.find(c => c.chat_id === chat_id);
     if (!chat) throw new Error('קבוצה לא נמצאה');
-    const summaries = await db.getSummariesForChat(chat_id, 1);
-    if (!summaries.length) throw new Error('אין עדיין סיכום לקבוצה זו');
-    const summary = summaries[0];
+    let summary;
+    if (summary_id) {
+      const all = await db.getSummariesForChat(chat_id, 100);
+      summary = all.find(s => s.id === summary_id);
+      if (!summary) throw new Error('סיכום לא נמצא');
+    } else {
+      const summaries = await db.getSummariesForChat(chat_id, 1);
+      if (!summaries.length) throw new Error('אין עדיין סיכום לקבוצה זו');
+      summary = summaries[0];
+    }
     const text = gemini.formatSummaryForWhatsApp(chat.name, summary.content);
     await greenApi.sendWhatsAppMessage(settings.apiUrl, settings.idInstance, settings.apiTokenInstance, settings.recipientChatId, text);
     res.json(await db.markSummarySent(summary.id));
+  } catch (error) { handleError(res, error); }
+});
+
+// Media messages (voice/images) currently buffered for a chat — cleared
+// after each summarize, so this reflects "since the last summary".
+app.get('/api/chats/:chatId/messages', async (req, res) => {
+  try { res.json(await db.getMessagesForChat(req.params.chatId)); } catch (error) { handleError(res, error); }
+});
+
+app.post('/api/messages/:messageId/transcribe', async (req, res) => {
+  try {
+    const settings = await db.getSettings();
+    if (!settings.geminiApiKey) throw new Error('לא הוגדר מפתח Gemini בהגדרות');
+    const msg = await db.getMessageById(req.params.messageId);
+    if (!msg || !msg.file_url) throw new Error('לא נמצא קובץ קול להודעה זו');
+    const audioBase64 = await greenApi.downloadMediaAsBase64(msg.file_url);
+    const transcription = await gemini.transcribeVoiceMessage(settings.geminiApiKey, audioBase64, 'audio/ogg');
+    const updated = await db.updateMessageBody(req.params.messageId, `[תמלול הודעה קולית]: ${transcription}`);
+    res.json(updated);
+  } catch (error) { handleError(res, error); }
+});
+
+app.post('/api/messages/:messageId/ocr', async (req, res) => {
+  try {
+    const settings = await db.getSettings();
+    if (!settings.geminiApiKey) throw new Error('לא הוגדר מפתח Gemini בהגדרות');
+    const msg = await db.getMessageById(req.params.messageId);
+    if (!msg || !msg.file_url) throw new Error('לא נמצאה תמונה להודעה זו');
+    const imageBase64 = await greenApi.downloadMediaAsBase64(msg.file_url);
+    const extractedText = await gemini.ocrImage(settings.geminiApiKey, imageBase64, 'image/jpeg');
+    const updated = await db.updateMessageBody(req.params.messageId, `[טקסט שחולץ מתמונה - OCR]:\n${extractedText}`);
+    res.json(updated);
   } catch (error) { handleError(res, error); }
 });
 
