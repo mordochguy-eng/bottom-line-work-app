@@ -147,6 +147,7 @@ async function scanSegment(settings, label, targets, cutoffSeconds, remainingLim
               task: it.task,
               category: it.category || null,
               assignee: it.sender || target.name,
+              direction: it.direction,
               deadline: it.deadline || null,
               created_at: scheduler.resolveMessageCreatedAt(it.messageDate, recent[recent.length - 1]?.timestamp)
             })));

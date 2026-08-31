@@ -9,6 +9,7 @@ export default function TasksPage() {
   const [chats, setChats] = useState([]);
   const [settings, setSettings] = useState({});
   const [filter, setFilter] = useState('active'); // active | saved | completed
+  const [directionFilter, setDirectionFilter] = useState('all'); // all | waiting_on_them | my_action
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [scanDays, setScanDays] = useState(7);
@@ -170,6 +171,7 @@ export default function TasksPage() {
   }
 
   const filtered = items.filter(i => {
+    if (directionFilter !== 'all' && (i.direction || 'my_action') !== directionFilter) return false;
     if (filter === 'completed') return i.completed;
     if (filter === 'saved') return i.saved_for_later && !i.completed;
     return !i.completed && !i.saved_for_later;
@@ -257,9 +259,15 @@ export default function TasksPage() {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 18, alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         {[['active', 'פעילות'], ['saved', 'שמורות להמשך'], ['completed', 'בוצעו']].map(([key, label]) => (
           <button key={key} className="btn btn-sm" style={filter === key ? { background: 'var(--accent-primary-glow)', color: 'var(--accent-primary)', borderColor: 'rgba(79,70,229,0.2)' } : {}} onClick={() => setFilter(key)}>
+            {label}
+          </button>
+        ))}
+        <span style={{ width: 1, height: 20, background: 'var(--border-color)', margin: '0 4px' }} />
+        {[['all', 'הכל'], ['my_action', '📥 לטיפולי'], ['waiting_on_them', '📤 ממתין מהם']].map(([key, label]) => (
+          <button key={key} className="btn btn-sm" style={directionFilter === key ? { background: 'var(--accent-warning-glow, rgba(180,83,9,0.1))', color: 'var(--accent-warning)', borderColor: 'rgba(180,83,9,0.25)' } : {}} onClick={() => setDirectionFilter(key)}>
             {label}
           </button>
         ))}
@@ -301,7 +309,18 @@ export default function TasksPage() {
                 {sorted.map(item => (
                   <tr key={item.id}>
                     <td className="row-id">#{item.id}</td>
-                    <td style={item.completed ? { textDecoration: 'line-through', color: 'var(--text-muted)' } : {}}>{item.task}</td>
+                    <td style={item.completed ? { textDecoration: 'line-through', color: 'var(--text-muted)' } : {}}>
+                      {item.direction && (
+                        <span
+                          className="badge badge-warning"
+                          style={{ marginLeft: 6, fontSize: '0.7rem' }}
+                          title={item.direction === 'waiting_on_them' ? 'ממתין לתשובה מהצד השני' : 'דורש פעולה שלי'}
+                        >
+                          {item.direction === 'waiting_on_them' ? '📤 מהם' : '📥 אצלי'}
+                        </span>
+                      )}
+                      {item.task}
+                    </td>
                     <td>{item.category ? <span className="badge badge-info">{item.category}</span> : '—'}</td>
                     <td>
                       {item.chat_id?.endsWith('@c.us') && chatName(item.chat_id) === item.chat_id
