@@ -69,11 +69,12 @@ async function callGeminiModel(apiKey, model, systemInstruction, prompt, respons
 
 /** Summarize a WhatsApp chat log into a short structured digest (Hebrew). */
 export async function summarizeMessages(apiKey, messagesText, chatName) {
-  const systemInstruction = 'You are an advanced AI assistant that specializes in reading WhatsApp work-group chat logs and summarizing them into structured insights in Hebrew. Focus on updates, decisions, and follow-up tasks. Ignore small talk.';
+  const systemInstruction = `You are an advanced AI assistant that specializes in reading WhatsApp work-group chat logs and summarizing them into structured insights in Hebrew. Focus on updates, decisions, and follow-up tasks. Ignore small talk.
+Messages sent by the account owner (labeled "אני") are just as important as messages from anyone else: if the owner asked the group for something and nobody in the group has answered yet, that is a real, open action item — the group (or the specific person addressed) is the assignee, and the task is the reply/answer still owed to the owner. Do not treat the owner's own outgoing request as "handled" just because the owner was the one who sent the most recent message(s) — a request without a reply is still pending.`;
   const schema = `{
   "summary": "סיכום קצר (עד 3 שורות) של עדכוני היום",
   "topics": [ { "topic": "נושא מרכזי", "bullets": ["פירוט הנושא והחלטות"] } ],
-  "actionItems": [ { "task": "המשימה הנדרשת לביצוע", "assignee": "האחראי לביצוע", "category": "קטגוריית הבקשה בעברית, למשל הצעת מחיר/בדיקת זכאות/מענה נדרש/תיאום פגישה/תשלום/מסמך אישור", "deadline": "תאריך יעד בפורמט YYYY-MM-DD אם יש", "messageDate": "תאריך ההודעה המקורית שבה המשימה נרשמה, בפורמט YYYY-MM-DD" } ],
+  "actionItems": [ { "task": "המשימה הנדרשת לביצוע (כולל בקשות שאני שלחתי לקבוצה ועדיין לא קיבלו מענה)", "assignee": "האחראי לביצוע - יכול להיות הקבוצה או אדם ספציפי בה, גם כשהבקשה נשלחה על ידי", "category": "קטגוריית הבקשה בעברית, למשל הצעת מחיר/בדיקת זכאות/מענה נדרש/תיאום פגישה/תשלום/מסמך אישור", "deadline": "תאריך יעד בפורמט YYYY-MM-DD אם יש", "messageDate": "תאריך ההודעה המקורית שבה המשימה נרשמה, בפורמט YYYY-MM-DD" } ],
   "decisions": ["החלטה 1 שהתקבלה"]
 }`;
   const prompt = `נתח את יומן ההודעות הבא מקבוצת הוואטסאפ "${chatName}".
@@ -124,8 +125,8 @@ export function formatSummaryForWhatsApp(chatName, summaryData) {
  * individually when scanning days of backlog.
  */
 export async function scanChatForActions(apiKey, { chatName, isGroup, messages }) {
-  const systemInstruction = `אתה עוזר שסורק שיחת וואטסאפ ${isGroup ? 'קבוצתית' : 'אישית'} ומזהה אילו הודעות ספציפיות דרשו פעולה מבעל החשבון (מענה, ביצוע בקשה, מתן הצעת מחיר, בדיקת זכאות, עמידה בדדליין וכו').
-התעלם משיחת חולין ומהודעות שכבר טופלו במהלך השיחה עצמה (למשל אם מישהו אחר בשיחה כבר ענה, או אם בעל החשבון עצמו - המסומן "אני" - כבר הגיב). אם אינך בטוח, אל תכלול - עדיף לפספס מקרה גבולי מאשר להציף ברשימת המשימות.
+  const systemInstruction = `אתה עוזר שסורק שיחת וואטסאפ ${isGroup ? 'קבוצתית' : 'אישית'} ומזהה אילו הודעות ספציפיות דורשות מעקב: גם דברים שמישהו ביקש מבעל החשבון (מענה, ביצוע בקשה, מתן הצעת מחיר, בדיקת זכאות, עמידה בדדליין וכו'), וגם דברים שבעל החשבון עצמו - המסומן "אני" - ביקש מהצד השני וטרם קיבל עליהם תשובה.
+התעלם משיחת חולין, ומהודעות שכבר טופלו בפועל במהלך השיחה עצמה - כלומר כשמישהו בשיחה השיב תשובה עניינית לבקשה. אם בעל החשבון שלח בקשה/תזכורת ואף אחד עוד לא ענה עליה, זו עדיין משימה פתוחה שממתינה לתשובה - אל תסמן אותה כ"טופלה" רק כי בעל החשבון הוא זה ששלח את ההודעה האחרונה. אם אינך בטוח האם בקשה קיבלה מענה של ממש, אל תכלול - עדיף לפספס מקרה גבולי מאשר להציף ברשימת המשימות.
 לכל פריט קבע קטגוריה קצרה שמאפיינת את סוג הבקשה - למשל "הצעת מחיר", "בדיקת זכאות", "מענה נדרש", "תיאום פגישה", "תשלום", "מסמך/אישור", או קטגוריה מתאימה אחרת בעברית.`;
   const schema = `{ "items": [ { "task": "תיאור קצר וברור של מה שצריך לעשות", "sender": "שם השולח של ההודעה הרלוונטית", "category": "קטגוריית הבקשה בעברית", "deadline": "תאריך יעד בפורמט YYYY-MM-DD אם צוין, אחרת null", "messageDate": "תאריך ההודעה הרלוונטית עצמה (מהתמליל) בפורמט YYYY-MM-DD" } ] }`;
   const transcript = messages
