@@ -173,6 +173,63 @@ export async function getLatestSummaries() {
   return Array.from(byChat.values());
 }
 
+// ---------- Generic activity log (undo support) ----------
+function truncateText(text, len = 60) {
+  if (!text) return '';
+  const t = String(text).trim().replace(/\s+/g, ' ');
+  return t.length > len ? t.slice(0, len) + '…' : t;
+}
+
+export async function getActivityLog(limit = 100) {
+  const log = await readJson('activity_log.json', []);
+  return [...log].reverse().slice(0, limit);
+}
+
+export async function addActivityLog(entry) {
+  const log = await readJson('activity_log.json', []);
+  const newEntry = { id: nextId(log), timestamp: new Date().toISOString(), undone: false, ...entry };
+  log.push(newEntry);
+  await writeJson('activity_log.json', log.slice(-200));
+  return newEntry;
+}
+
+// action: 'update' reverts a single field to prev_value; 'update_multi'
+// reverts several fields at once (prev_values); 'delete' re-inserts the
+// full record that was removed.
+export async function undoActivityLogEntry(id) {
+  const log = await readJson('activity_log.json', []);
+  const entry = log.find(l => l.id === id);
+  if (!entry) return { success: false, message: 'הפעולה לא נמצאה' };
+  if (entry.undone) return { success: false, message: 'הפעולה כבר בוטלה' };
+
+  const idField = entry.id_field || 'id';
+
+  if (entry.action === 'update') {
+    const collection = await readJson(entry.file, []);
+    const item = collection.find(x => x[idField] === entry.entity_id);
+    if (item) {
+      item[entry.field] = entry.prev_value;
+      await writeJson(entry.file, collection);
+    }
+  } else if (entry.action === 'update_multi') {
+    const collection = await readJson(entry.file, []);
+    const item = collection.find(x => x[idField] === entry.entity_id);
+    if (item) {
+      Object.assign(item, entry.prev_values);
+      await writeJson(entry.file, collection);
+    }
+  } else if (entry.action === 'delete') {
+    const collection = await readJson(entry.file, []);
+    collection.push(entry.record);
+    await writeJson(entry.file, collection);
+  }
+
+  entry.undone = true;
+  entry.undone_at = new Date().toISOString();
+  await writeJson('activity_log.json', log);
+  return { success: true, entry };
+}
+
 // ---------- Action items ----------
 // Dedupes against ALL existing items for the same chat (open or completed) —
 // overlapping scan windows (live listener + history scan, or two history
@@ -212,29 +269,72 @@ export async function getActionItems() {
 export async function setActionItems(items) {
   await writeJson('action_items.json', items);
 }
+// Toggle completed, logging the change for undo (only when the value changes).
 export async function setActionItemCompleted(id, completed) {
   const items = await getActionItems();
   const idx = items.findIndex(i => i.id === id);
   if (idx === -1) throw new Error('Action item not found');
-  items[idx].completed = completed;
-  await writeJson('action_items.json', items);
+  const prevValue = !!items[idx].completed;
+  const newValue = !!completed;
+  if (prevValue !== newValue) {
+    items[idx].completed = newValue;
+    await writeJson('action_items.json', items);
+    await addActivityLog({
+      type: 'action_item_completed',
+      description: `${newValue ? 'סומנה כהושלמה משימה' : 'בוטל סימון השלמה למשימה'}: "${truncateText(items[idx].task)}"`,
+      action: 'update',
+      file: 'action_items.json',
+      entity_id: id,
+      field: 'completed',
+      prev_value: prevValue,
+      new_value: newValue
+    });
+  }
   return items[idx];
 }
+// Toggle saved-for-later, logging the change for undo.
 export async function setActionItemSavedForLater(id, saved, snoozedUntil = null) {
   const items = await getActionItems();
   const idx = items.findIndex(i => i.id === id);
   if (idx === -1) throw new Error('Action item not found');
-  items[idx].saved_for_later = saved;
-  items[idx].snoozed_until = saved ? snoozedUntil : null;
-  await writeJson('action_items.json', items);
+  const prevValues = { saved_for_later: !!items[idx].saved_for_later, snoozed_until: items[idx].snoozed_until };
+  const newValues = { saved_for_later: !!saved, snoozed_until: saved ? snoozedUntil : null };
+  if (prevValues.saved_for_later !== newValues.saved_for_later || prevValues.snoozed_until !== newValues.snoozed_until) {
+    Object.assign(items[idx], newValues);
+    await writeJson('action_items.json', items);
+    await addActivityLog({
+      type: 'action_item_saved',
+      description: `${newValues.saved_for_later ? 'שמירת משימה להמשך' : 'הסרת שמירה להמשך ממשימה'}: "${truncateText(items[idx].task)}"`,
+      action: 'update_multi',
+      file: 'action_items.json',
+      entity_id: id,
+      prev_values: prevValues,
+      new_values: newValues
+    });
+  }
   return items[idx];
 }
+// Change the deadline, logging the previous value for undo.
 export async function setActionItemDeadline(id, deadline) {
   const items = await getActionItems();
   const idx = items.findIndex(i => i.id === id);
   if (idx === -1) throw new Error('Action item not found');
-  items[idx].deadline = deadline || null;
-  await writeJson('action_items.json', items);
+  const prevValue = items[idx].deadline || null;
+  const newValue = deadline || null;
+  if (prevValue !== newValue) {
+    items[idx].deadline = newValue;
+    await writeJson('action_items.json', items);
+    await addActivityLog({
+      type: 'action_item_deadline',
+      description: `שינוי תאריך ביצוע למשימה: "${truncateText(items[idx].task)}"${newValue ? ` ל-${newValue}` : ' (הוסר)'}`,
+      action: 'update',
+      file: 'action_items.json',
+      entity_id: id,
+      field: 'deadline',
+      prev_value: prevValue,
+      new_value: newValue
+    });
+  }
   return items[idx];
 }
 

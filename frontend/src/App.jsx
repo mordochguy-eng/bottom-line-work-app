@@ -6,6 +6,7 @@ import GroupsPage from './pages/GroupsPage.jsx';
 import TasksPage from './pages/TasksPage.jsx';
 import ApprovalQueuePage from './pages/ApprovalQueuePage.jsx';
 import ScheduledMessagesPage from './pages/ScheduledMessagesPage.jsx';
+import ActivityLogPage from './pages/ActivityLogPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
 
 const NAV_ITEMS = [
@@ -14,6 +15,7 @@ const NAV_ITEMS = [
   { key: 'tasks', label: 'משימות', icon: '✅' },
   { key: 'queue', label: 'תור אישור תגובות', icon: '📥' },
   { key: 'scheduled', label: 'הודעות מתוזמנות', icon: '📨' },
+  { key: 'activity', label: 'יומן פעולות', icon: '🕘' },
   { key: 'settings', label: 'הגדרות', icon: '⚙️' }
 ];
 
@@ -40,6 +42,7 @@ function AppInner() {
     tasks: TasksPage,
     queue: ApprovalQueuePage,
     scheduled: ScheduledMessagesPage,
+    activity: ActivityLogPage,
     settings: SettingsPage
   }[activeTab];
 
