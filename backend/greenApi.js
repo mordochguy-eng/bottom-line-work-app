@@ -140,8 +140,12 @@ export async function fetchChatHistory(apiUrl, idInstance, apiTokenInstance, cha
     });
     return normalized.reverse();
   } catch (error) {
+    // Surfaces as a real error instead of silently returning [] — an empty
+    // array here used to look identical to "this chat genuinely has no
+    // messages," masking transient Green API failures (429 rate limits,
+    // DNS hiccups) as "אין הודעות לסיכום" even when the chat is active.
     console.error(`Error fetching history for chat ${chatId}:`, error.message);
-    return [];
+    throw new Error(`שליפת ההיסטוריה מוואטסאפ נכשלה: ${error.response?.status === 429 ? 'הגעת למגבלת הבקשות של Green API, נסה שוב בעוד דקה' : error.message}`);
   }
 }
 
