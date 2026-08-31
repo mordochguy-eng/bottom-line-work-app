@@ -20,9 +20,12 @@ export const api = {
   toggleChatDigest: (chat_id, include_in_digest) => request('/chats/toggle-digest', { method: 'POST', body: JSON.stringify({ chat_id, include_in_digest }) }),
   setChatCategory: (chat_id, category) => request('/chats/category', { method: 'POST', body: JSON.stringify({ chat_id, category }) }),
   summarizeChat: (chat_id) => request('/chats/summarize', { method: 'POST', body: JSON.stringify({ chat_id }) }),
-  sendChatDigest: (chat_id) => request('/chats/send-digest', { method: 'POST', body: JSON.stringify({ chat_id }) }),
+  sendChatDigest: (chat_id, summary_id) => request('/chats/send-digest', { method: 'POST', body: JSON.stringify({ chat_id, summary_id }) }),
   getSummaries: (chatId) => request(`/chats/${encodeURIComponent(chatId)}/summaries`),
   getLatestSummaries: () => request('/summaries/latest'),
+  getChatMessages: (chatId) => request(`/chats/${encodeURIComponent(chatId)}/messages`),
+  transcribeMessage: (messageId) => request(`/messages/${encodeURIComponent(messageId)}/transcribe`, { method: 'POST' }),
+  ocrMessage: (messageId) => request(`/messages/${encodeURIComponent(messageId)}/ocr`, { method: 'POST' }),
   askAboutChat: (chat_id, question, chatHistory) => request('/ai/ask-about-chat', { method: 'POST', body: JSON.stringify({ chat_id, question, chatHistory }) }),
 
   getActionItems: () => request('/action-items'),

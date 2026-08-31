@@ -113,14 +113,15 @@ export async function fetchChatHistory(apiUrl, idInstance, apiTokenInstance, cha
     const normalized = rawMsgs.map(msg => {
       let body = '';
       let type = 'text';
+      let fileUrl = null;
       if (msg.typeMessage === 'textMessage' || msg.typeMessage === 'extendedTextMessage') {
         body = msg.textMessage || '';
       } else if (msg.typeMessage === 'imageMessage') {
-        body = msg.caption || '[Image]'; type = 'image';
+        body = msg.caption || '[Image]'; type = 'image'; fileUrl = msg.downloadUrl || null;
       } else if (msg.typeMessage === 'audioMessage') {
-        body = '[Voice Message]'; type = 'audio';
+        body = '[Voice Message]'; type = 'audio'; fileUrl = msg.downloadUrl || null;
       } else if (msg.typeMessage === 'documentMessage') {
-        body = msg.caption || `[Document: ${msg.fileName || ''}]`; type = 'document';
+        body = msg.caption || `[Document: ${msg.fileName || ''}]`; type = 'document'; fileUrl = msg.downloadUrl || null;
       } else {
         body = msg.textMessage || `[Message: ${msg.typeMessage || 'unknown'}]`;
       }
@@ -133,13 +134,26 @@ export async function fetchChatHistory(apiUrl, idInstance, apiTokenInstance, cha
         sender_name: senderName,
         type,
         body,
-        timestamp: msg.timestamp || Math.floor(Date.now() / 1000)
+        timestamp: msg.timestamp || Math.floor(Date.now() / 1000),
+        file_url: fileUrl
       };
     });
     return normalized.reverse();
   } catch (error) {
     console.error(`Error fetching history for chat ${chatId}:`, error.message);
     return [];
+  }
+}
+
+// Downloads a WhatsApp media file (voice note / image) so it can be handed
+// to Gemini as inline base64 data for transcription/OCR.
+export async function downloadMediaAsBase64(url) {
+  try {
+    const response = await axios.get(url, { responseType: 'arraybuffer', timeout: 30000 });
+    return Buffer.from(response.data).toString('base64');
+  } catch (error) {
+    console.error('Error downloading media:', error.message);
+    throw new Error('הורדת הקובץ מוואטסאפ נכשלה.');
   }
 }
 
