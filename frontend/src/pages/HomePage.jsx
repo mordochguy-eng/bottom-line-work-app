@@ -12,6 +12,7 @@ export default function HomePage() {
   const [cardBusy, setCardBusy] = useState({}); // chat_id -> 'summarizing' | 'sending'
   const [globalSummarizing, setGlobalSummarizing] = useState(false);
   const [globalProgress, setGlobalProgress] = useState(null);
+  const [search, setSearch] = useState('');
 
   // Group detail modal — one modal, four tabs (mirrors the personal dashboard).
   const [detailChat, setDetailChat] = useState(null);
@@ -44,7 +45,10 @@ export default function HomePage() {
 
   useEffect(() => { load(); }, []);
 
-  const tracked = chats.filter(c => c.is_tracked);
+  const allTracked = chats.filter(c => c.is_tracked);
+  // Search only narrows what's shown — "summarize all" still means all
+  // tracked groups, not just whatever the search happens to be filtering to.
+  const tracked = allTracked.filter(c => !search.trim() || c.name.toLowerCase().includes(search.trim().toLowerCase()));
   const summaryByChatId = Object.fromEntries(summaries.map(s => [s.chat_id, s]));
   const openCount = (chatId) => actionItems.filter(a => a.chat_id === chatId && !a.completed).length;
   // A group "has an update" when its latest summary is newer than the last
@@ -77,21 +81,21 @@ export default function HomePage() {
 
   async function handleSummarizeAll() {
     setGlobalSummarizing(true);
-    setGlobalProgress({ current: 0, total: tracked.length });
+    setGlobalProgress({ current: 0, total: allTracked.length });
     let ok = 0;
-    for (let i = 0; i < tracked.length; i++) {
+    for (let i = 0; i < allTracked.length; i++) {
       try {
-        await api.summarizeChat(tracked[i].chat_id);
+        await api.summarizeChat(allTracked[i].chat_id);
         ok++;
       } catch (err) {
-        console.error(`summarize failed for ${tracked[i].name}:`, err.message);
+        console.error(`summarize failed for ${allTracked[i].name}:`, err.message);
       }
-      setGlobalProgress({ current: i + 1, total: tracked.length });
+      setGlobalProgress({ current: i + 1, total: allTracked.length });
     }
     await load();
     setGlobalSummarizing(false);
     setGlobalProgress(null);
-    toast(`סוכמו ${ok}/${tracked.length} קבוצות`, 'success');
+    toast(`סוכמו ${ok}/${allTracked.length} קבוצות`, 'success');
   }
 
   async function openDetail(chat, tab = 'summaries') {
@@ -245,15 +249,29 @@ export default function HomePage() {
           <h2>🏠 הפיד היומי שלך</h2>
           <p>ריכוז סיכומי קבוצות הוואטסאפ במעקב</p>
         </div>
-        <button className="btn btn-primary" onClick={handleSummarizeAll} disabled={globalSummarizing || tracked.length === 0}>
-          {globalSummarizing ? `📝 מסכם... ${globalProgress ? `(${globalProgress.current}/${globalProgress.total})` : ''}` : '📝 סכם עכשיו'}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <input
+            className="form-input"
+            placeholder="🔍 חפש קבוצה/לקוח לפי שם..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ width: 240 }}
+          />
+          <button className="btn btn-primary" onClick={handleSummarizeAll} disabled={globalSummarizing || allTracked.length === 0}>
+            {globalSummarizing ? `📝 מסכם... ${globalProgress ? `(${globalProgress.current}/${globalProgress.total})` : ''}` : '📝 סכם עכשיו'}
+          </button>
+        </div>
       </div>
 
-      {tracked.length === 0 ? (
+      {allTracked.length === 0 ? (
         <div className="glass-card empty-state">
           <div className="empty-state-icon">💬</div>
           <p>עדיין אין קבוצות במעקב. עבור ללשונית "קבוצות מעקב" כדי להתחיל.</p>
+        </div>
+      ) : tracked.length === 0 ? (
+        <div className="glass-card empty-state">
+          <div className="empty-state-icon">🔍</div>
+          <p>לא נמצאו קבוצות התואמות ל"{search}".</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
