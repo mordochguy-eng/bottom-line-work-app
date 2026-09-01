@@ -184,7 +184,7 @@ export default function HomePage() {
     const isOpen = !!expanded[chat.chat_id];
 
     return (
-      <div key={chat.chat_id} className="glass-card" style={{ padding: '12px 18px', ...(updated ? { borderRight: '4px solid var(--accent-warning)', background: 'rgba(180, 83, 9, 0.04)' } : {}) }}>
+      <div key={chat.chat_id} className="glass-card" style={{ padding: '12px 18px', background: '#fff', ...(updated ? { border: '1px solid rgba(180, 83, 9, 0.4)' } : {}) }}>
         <div
           style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', cursor: 'pointer' }}
           onClick={() => setExpanded(p => ({ ...p, [chat.chat_id]: !p[chat.chat_id] }))}
