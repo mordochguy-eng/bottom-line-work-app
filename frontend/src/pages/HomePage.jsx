@@ -189,17 +189,6 @@ export default function HomePage() {
           style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', cursor: 'pointer' }}
           onClick={() => setExpanded(p => ({ ...p, [chat.chat_id]: !p[chat.chat_id] }))}
         >
-          <span
-            title={isOpen ? 'סגור' : 'פתח לתקציר המלא'}
-            style={{
-              fontSize: '0.9rem', color: 'var(--accent-primary)', flexShrink: 0, width: 22, height: 22,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%',
-              background: 'var(--accent-primary-glow)', transition: 'transform 0.15s ease',
-              transform: isOpen ? 'rotate(90deg)' : 'none'
-            }}
-          >
-            ▸
-          </span>
           <strong
             style={{ fontSize: '1rem', cursor: 'pointer', flexShrink: 0 }}
             onClick={(e) => { e.stopPropagation(); openDetail(chat, 'summaries'); }}
@@ -212,16 +201,7 @@ export default function HomePage() {
             {openCount(chat.chat_id) > 0 && <span className="badge badge-danger">{openCount(chat.chat_id)} משימות</span>}
           </div>
 
-          {summary ? (
-            <p style={{
-              color: 'var(--text-secondary)', fontSize: '0.85rem', margin: 0, flex: '1 1 200px', minWidth: 0,
-              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
-            }}>
-              {summary.content.summary}
-            </p>
-          ) : (
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0, flex: '1 1 200px' }}>אין עדיין סיכום לקבוצה זו.</p>
-          )}
+          <div style={{ flex: 1 }} />
 
           {summary && (
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', flexShrink: 0, whiteSpace: 'nowrap' }}>
@@ -235,12 +215,28 @@ export default function HomePage() {
               {busy === 'summarizing' ? 'מסכם...' : '📝 סכם עכשיו'}
             </button>
           </div>
+
+          <span
+            title={isOpen ? 'סגור' : 'פתח לתקציר המלא'}
+            style={{
+              fontSize: '0.9rem', color: 'var(--accent-primary)', flexShrink: 0, width: 22, height: 22,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%',
+              background: 'var(--accent-primary-glow)', transition: 'transform 0.15s ease',
+              transform: isOpen ? 'rotate(90deg)' : 'none'
+            }}
+          >
+            ▸
+          </span>
         </div>
 
-        {isOpen && summary && (
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6, margin: '12px 0 0', paddingTop: 12, borderTop: '1px solid var(--border-color)' }}>
-            {summary.content.summary}
-          </p>
+        {isOpen && (
+          summary ? (
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6, margin: '12px 0 0', paddingTop: 12, borderTop: '1px solid var(--border-color)' }}>
+              {summary.content.summary}
+            </p>
+          ) : (
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', margin: '12px 0 0', paddingTop: 12, borderTop: '1px solid var(--border-color)' }}>אין עדיין סיכום לקבוצה זו.</p>
+          )
         )}
       </div>
     );
