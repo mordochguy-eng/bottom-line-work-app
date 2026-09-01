@@ -44,21 +44,19 @@ body {
   background-attachment: fixed;
 }
 
-.app-container { display: flex; min-height: 100vh; width: 100vw; }
+.app-shell { display: flex; flex-direction: column; min-height: 100vh; }
+.app-header-banner, .app-footer-banner { width: 100%; display: block; }
+.app-container { display: flex; flex: 1; width: 100%; }
 
 .sidebar {
   width: 250px;
+  flex-shrink: 0;
   background: var(--glass-bg);
   backdrop-filter: blur(16px);
   border-left: 1px solid var(--glass-border);
   padding: 24px 16px;
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  position: fixed;
-  right: 0;
-  top: 0;
-  z-index: 100;
 }
 
 .sidebar-logo {
@@ -106,7 +104,7 @@ body {
 
 .sidebar-footer { padding-top: 14px; border-top: 1px solid var(--border-color); font-size: 0.78rem; color: var(--text-muted); text-align: center; }
 
-.main-content { margin-right: 250px; flex-grow: 1; padding: 36px; min-height: 100vh; width: calc(100% - 250px); }
+.main-content { flex-grow: 1; padding: 36px; min-width: 0; }
 
 .glass-card {
   background: var(--glass-bg);
@@ -239,5 +237,5 @@ input:checked + .slider:before { transform: translateX(19px); }
   .sidebar-logo-text, .sidebar-footer, .sidebar-item button span:not(.icon) { display: none; }
   .sidebar-logo { justify-content: center; border-bottom: none; }
   .sidebar-item button { justify-content: center; }
-  .main-content { margin-right: 66px; width: calc(100% - 66px); padding: 18px; }
+  .main-content { padding: 18px; }
 }
