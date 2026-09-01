@@ -35,6 +35,7 @@ bottom-line for S-On/
 ├── scripts/
 │   ├── register-autostart-task.ps1 ← רושם Task Scheduler להפעלה אוטומטית (כמו bottom-line האישי)
 │   ├── start-and-notify.ps1        ← מריץ pm2 resurrect + התרעת Windows, מופעל ע"י ה-task
+│   ├── watch-wake.ps1              ← כמו start-and-notify, אבל רץ מתיקיית ההפעלה (בלי צורך בהרשאות מנהל) ונשאר במעקב אחרי כל השכמה מהשינה
 │   ├── export-data.ps1             ← מייצא את backend/data/ ל-ZIP בשולחן העבודה
 │   └── import-data.ps1             ← מייבא ZIP כזה חזרה ל-backend/data/, עם גיבוי של הקיים
 ├── sync-config.json       ← {"repo": "owner/name", "branch": "main"} — עולה לגיט
