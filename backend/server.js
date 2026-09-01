@@ -187,8 +187,17 @@ app.post('/api/chats/summarize', async (req, res) => {
 
     const history = await greenApi.fetchChatHistory(settings.apiUrl, settings.idInstance, settings.apiTokenInstance, chat_id, 150);
     await db.saveMessages(chat_id, history);
-    const allMessages = await db.getMessagesForChat(chat_id);
-    if (allMessages.length === 0) throw new Error('אין הודעות לסיכום בקבוצה זו');
+    // getChatHistory always returns the last N messages regardless of what's
+    // actually new — without this filter, summarizing again right after a
+    // quiet day just re-fetches the same messages the last summary already
+    // covered (the buffer was cleared, so dedup against it sees them as
+    // fresh) and produces a near-identical duplicate summary.
+    const lastSummaryAt = chat.last_summary_at ? new Date(chat.last_summary_at).getTime() / 1000 : 0;
+    const allMessages = (await db.getMessagesForChat(chat_id)).filter(m => m.timestamp > lastSummaryAt);
+    if (allMessages.length === 0) {
+      await db.clearMessagesForChat(chat_id);
+      return res.json({ noNewMessages: true, message: 'אין עדכונים חדשים מאז הסיכום האחרון' });
+    }
 
     const messagesText = allMessages.map(m => `[${new Date(m.timestamp * 1000).toLocaleDateString('he-IL')} ${m.sender_name}]: ${m.body}`).join('\n');
     const summaryData = await gemini.summarizeMessages(settings.geminiApiKey, messagesText, chat.name);
@@ -655,8 +664,12 @@ cron.schedule('* * * * *', async () => {
         try {
           const history = await greenApi.fetchChatHistory(settings.apiUrl, settings.idInstance, settings.apiTokenInstance, chat.chat_id, 150);
           await db.saveMessages(chat.chat_id, history);
-          const allMessages = await db.getMessagesForChat(chat.chat_id);
-          if (allMessages.length === 0) continue;
+          // Same "only genuinely new since last summary" filter as the manual
+          // summarize endpoint — otherwise a quiet day re-summarizes the same
+          // last-150 messages the previous digest already covered.
+          const lastSummaryAt = chat.last_summary_at ? new Date(chat.last_summary_at).getTime() / 1000 : 0;
+          const allMessages = (await db.getMessagesForChat(chat.chat_id)).filter(m => m.timestamp > lastSummaryAt);
+          if (allMessages.length === 0) { await db.clearMessagesForChat(chat.chat_id); continue; }
           const messagesText = allMessages.map(m => `[${new Date(m.timestamp * 1000).toLocaleDateString('he-IL')} ${m.sender_name}]: ${m.body}`).join('\n');
           const summaryData = await gemini.summarizeMessages(settings.geminiApiKey, messagesText, chat.name);
           await db.insertSummary(chat.chat_id, summaryData);

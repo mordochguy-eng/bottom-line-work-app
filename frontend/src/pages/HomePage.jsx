@@ -110,10 +110,10 @@ export default function HomePage() {
   async function handleSummarizeOne(chat) {
     setCardBusy(p => ({ ...p, [chat.chat_id]: 'summarizing' }));
     try {
-      await api.summarizeChat(chat.chat_id);
+      const result = await api.summarizeChat(chat.chat_id);
       await load();
       if (rowData[chat.chat_id]) await refreshRowData(chat.chat_id);
-      toast('הסיכום הופק בהצלחה', 'success');
+      toast(result?.noNewMessages ? 'אין עדכונים חדשים מאז הסיכום האחרון' : 'הסיכום הופק בהצלחה', result?.noNewMessages ? 'info' : 'success');
     } catch (err) { toast(err.message, 'error'); } finally { setCardBusy(p => ({ ...p, [chat.chat_id]: null })); }
   }
 
