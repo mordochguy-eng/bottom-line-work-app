@@ -2,9 +2,9 @@
 // icons like 🤝/📢/🔔 render too visually similar at small sizes, so each
 // category gets an unambiguous color instead, matched to its badge color.
 export const CATEGORIES = {
-  info: { label: 'קבוצות לידיעה', icon: '🔵', color: '#0891b2', badge: 'badge-info' },
-  customers: { label: 'קבוצות לקוחות', icon: '🟠', color: '#b45309', badge: 'badge-warning' },
-  distribution: { label: 'קבוצות הפצה', icon: '🟣', color: '#7e22ce', badge: 'badge-purple' },
+  info: { label: 'ידיעה', icon: '🔵', color: '#0891b2', badge: 'badge-info' },
+  customers: { label: 'לקוחות', icon: '🟠', color: '#b45309', badge: 'badge-warning' },
+  distribution: { label: 'הפצה', icon: '🟣', color: '#7e22ce', badge: 'badge-purple' },
   general: { label: 'כללי', icon: '⚪', color: '#475569', badge: 'badge-muted' }
 };
 

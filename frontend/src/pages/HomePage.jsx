@@ -71,15 +71,6 @@ export default function HomePage() {
     } catch (err) { toast(err.message, 'error'); } finally { setCardBusy(p => ({ ...p, [chatId]: null })); }
   }
 
-  async function handleSendOne(chatId) {
-    setCardBusy(p => ({ ...p, [chatId]: 'sending' }));
-    try {
-      await api.sendChatDigest(chatId);
-      await load();
-      toast('הסיכום נשלח לוואטסאפ', 'success');
-    } catch (err) { toast(err.message, 'error'); } finally { setCardBusy(p => ({ ...p, [chatId]: null })); }
-  }
-
   async function handleSummarizeAll() {
     setGlobalSummarizing(true);
     setGlobalProgress({ current: 0, total: allTracked.length });
@@ -188,7 +179,6 @@ export default function HomePage() {
 
   function renderCard(chat) {
     const summary = summaryByChatId[chat.chat_id];
-    const cat = CATEGORIES[chat.profile_type] || CATEGORIES.general;
     const busy = cardBusy[chat.chat_id];
     const updated = hasUpdate(chat);
     const isOpen = !!expanded[chat.chat_id];
@@ -199,7 +189,17 @@ export default function HomePage() {
           style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', cursor: 'pointer' }}
           onClick={() => setExpanded(p => ({ ...p, [chat.chat_id]: !p[chat.chat_id] }))}
         >
-          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', flexShrink: 0 }}>{isOpen ? '▾' : '◂'}</span>
+          <span
+            title={isOpen ? 'סגור' : 'פתח לתקציר המלא'}
+            style={{
+              fontSize: '0.9rem', color: 'var(--accent-primary)', flexShrink: 0, width: 22, height: 22,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%',
+              background: 'var(--accent-primary-glow)', transition: 'transform 0.15s ease',
+              transform: isOpen ? 'rotate(90deg)' : 'none'
+            }}
+          >
+            ▸
+          </span>
           <strong
             style={{ fontSize: '1rem', cursor: 'pointer', flexShrink: 0 }}
             onClick={(e) => { e.stopPropagation(); openDetail(chat, 'summaries'); }}
@@ -209,7 +209,6 @@ export default function HomePage() {
           </strong>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flexShrink: 0 }}>
             {updated && <span className="badge badge-warning">🆕 עדכון חדש</span>}
-            <span className={`badge ${cat.badge}`}>{cat.icon} {cat.label}</span>
             {openCount(chat.chat_id) > 0 && <span className="badge badge-danger">{openCount(chat.chat_id)} משימות</span>}
           </div>
 
@@ -235,11 +234,6 @@ export default function HomePage() {
             <button className="btn btn-sm btn-primary" onClick={() => handleSummarizeOne(chat.chat_id)} disabled={!!busy}>
               {busy === 'summarizing' ? 'מסכם...' : '📝 סכם עכשיו'}
             </button>
-            {summary && (
-              <button className="btn btn-sm btn-success" onClick={() => handleSendOne(chat.chat_id)} disabled={!!busy}>
-                {busy === 'sending' ? 'שולח...' : '✉️ שלח'}
-              </button>
-            )}
           </div>
         </div>
 
