@@ -58,7 +58,19 @@ export default function GroupsPage() {
     } catch (err) { toast(err.message, 'error'); } finally { setSummarizingId(null); }
   }
 
-  const { sorted, sortKey, sortDir, requestSort } = useSort(chats, 'name', 'asc');
+  // Default arrangement (before any column header is clicked): grouped by
+  // category in the app's standard order, tracked groups first within each
+  // category — clicking a column header still overrides this, same as any
+  // other sortable table.
+  const categoryRank = Object.fromEntries(CATEGORY_ORDER.map((key, i) => [key, i]));
+  const basePreSorted = [...chats].sort((a, b) => {
+    const catDiff = (categoryRank[a.profile_type || 'general'] ?? 999) - (categoryRank[b.profile_type || 'general'] ?? 999);
+    if (catDiff !== 0) return catDiff;
+    const trackedDiff = (b.is_tracked ? 1 : 0) - (a.is_tracked ? 1 : 0);
+    if (trackedDiff !== 0) return trackedDiff;
+    return (a.name || '').localeCompare(b.name || '');
+  });
+  const { sorted, sortKey, sortDir, requestSort } = useSort(basePreSorted, null, 'asc');
 
   return (
     <>
