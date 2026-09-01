@@ -21,6 +21,11 @@ export default function HomePage() {
   const [rowBusy, setRowBusy] = useState({}); // chat_id -> 'summarizing' | `sending:<id>`
   const [mediaBusy, setMediaBusy] = useState({}); // message_id -> 'transcribe' | 'ocr'
   const [askState, setAskState] = useState({}); // chat_id -> { messages, input, asking }
+  // Snapshot of "has an update" taken at load time, used only for sort order
+  // — opening a row marks it viewed (and drops its badge) right away, but
+  // shouldn't yank it to a new position mid-click; it resettles the next
+  // time the list actually reloads.
+  const [sortSnapshot, setSortSnapshot] = useState({});
 
   const toast = useToast();
 
@@ -31,6 +36,13 @@ export default function HomePage() {
       setChats(c);
       setSummaries(s);
       setActionItems(a);
+      const summaryMap = Object.fromEntries(s.map(x => [x.chat_id, x]));
+      const snapshot = {};
+      c.forEach(chat => {
+        const summary = summaryMap[chat.chat_id];
+        snapshot[chat.chat_id] = !!summary && (!chat.last_viewed_at || new Date(summary.created_at) > new Date(chat.last_viewed_at));
+      });
+      setSortSnapshot(snapshot);
     } catch (err) {
       toast(err.message, 'error');
     } finally {
@@ -462,7 +474,7 @@ export default function HomePage() {
             // customer/distribution/info grouping stays intact.
             const inCategory = tracked
               .filter(c => (c.profile_type || 'general') === key)
-              .sort((a, b) => (hasUpdate(b) ? 1 : 0) - (hasUpdate(a) ? 1 : 0));
+              .sort((a, b) => (sortSnapshot[b.chat_id] ? 1 : 0) - (sortSnapshot[a.chat_id] ? 1 : 0));
             if (inCategory.length === 0) return null;
             const cat = CATEGORIES[key];
             return (
