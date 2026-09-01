@@ -194,55 +194,60 @@ export default function HomePage() {
     const isOpen = !!expanded[chat.chat_id];
 
     return (
-      <div key={chat.chat_id} className="glass-card" style={updated ? { borderRight: '4px solid var(--accent-warning)', background: 'rgba(180, 83, 9, 0.04)' } : undefined}>
-        <div style={{ cursor: 'pointer' }} onClick={() => setExpanded(p => ({ ...p, [chat.chat_id]: !p[chat.chat_id] }))}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10, gap: 8 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', flexShrink: 0 }}>{isOpen ? '▾' : '◂'}</span>
-              <strong
-                style={{ fontSize: '1.05rem', cursor: 'pointer' }}
-                onClick={(e) => { e.stopPropagation(); openDetail(chat, 'summaries'); }}
-                title="פתח פרטי קבוצה"
-              >
-                {chat.name}
-              </strong>
-            </div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-              {updated && <span className="badge badge-warning">🆕 עדכון חדש</span>}
-              <span className={`badge ${cat.badge}`}>{cat.icon} {cat.label}</span>
-              {openCount(chat.chat_id) > 0 && <span className="badge badge-danger">{openCount(chat.chat_id)} משימות</span>}
-            </div>
+      <div key={chat.chat_id} className="glass-card" style={{ padding: '12px 18px', ...(updated ? { borderRight: '4px solid var(--accent-warning)', background: 'rgba(180, 83, 9, 0.04)' } : {}) }}>
+        <div
+          style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', cursor: 'pointer' }}
+          onClick={() => setExpanded(p => ({ ...p, [chat.chat_id]: !p[chat.chat_id] }))}
+        >
+          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', flexShrink: 0 }}>{isOpen ? '▾' : '◂'}</span>
+          <strong
+            style={{ fontSize: '1rem', cursor: 'pointer', flexShrink: 0 }}
+            onClick={(e) => { e.stopPropagation(); openDetail(chat, 'summaries'); }}
+            title="פתח פרטי קבוצה"
+          >
+            {chat.name}
+          </strong>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flexShrink: 0 }}>
+            {updated && <span className="badge badge-warning">🆕 עדכון חדש</span>}
+            <span className={`badge ${cat.badge}`}>{cat.icon} {cat.label}</span>
+            {openCount(chat.chat_id) > 0 && <span className="badge badge-danger">{openCount(chat.chat_id)} משימות</span>}
           </div>
 
           {summary ? (
-            <>
-              <p style={{
-                color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6, marginBottom: 10,
-                ...(isOpen ? {} : { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' })
-              }}>
-                {summary.content.summary}
-              </p>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 12 }}>
-                <span>סיכום אחרון: {new Date(summary.created_at).toLocaleString('he-IL')}</span>
-                <span>{summary.is_sent ? '✅ נשלח לוואטסאפ' : '📥 טרם נשלח'}</span>
-              </div>
-            </>
+            <p style={{
+              color: 'var(--text-secondary)', fontSize: '0.85rem', margin: 0, flex: '1 1 200px', minWidth: 0,
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+            }}>
+              {summary.content.summary}
+            </p>
           ) : (
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginBottom: 12 }}>אין עדיין סיכום לקבוצה זו.</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0, flex: '1 1 200px' }}>אין עדיין סיכום לקבוצה זו.</p>
           )}
+
+          {summary && (
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', flexShrink: 0, whiteSpace: 'nowrap' }}>
+              {new Date(summary.created_at).toLocaleString('he-IL')} {summary.is_sent ? '✅' : '📥'}
+            </span>
+          )}
+
+          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+            <button className="btn btn-sm" onClick={() => openDetail(chat, 'ask')}>💬 שאל</button>
+            <button className="btn btn-sm btn-primary" onClick={() => handleSummarizeOne(chat.chat_id)} disabled={!!busy}>
+              {busy === 'summarizing' ? 'מסכם...' : '📝 סכם עכשיו'}
+            </button>
+            {summary && (
+              <button className="btn btn-sm btn-success" onClick={() => handleSendOne(chat.chat_id)} disabled={!!busy}>
+                {busy === 'sending' ? 'שולח...' : '✉️ שלח'}
+              </button>
+            )}
+          </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 8, borderTop: '1px solid var(--border-color)', paddingTop: 12 }}>
-          <button className="btn btn-sm" style={{ flexGrow: 1 }} onClick={() => openDetail(chat, 'ask')}>💬 שאל</button>
-          <button className="btn btn-sm btn-primary" style={{ flexGrow: 1 }} onClick={() => handleSummarizeOne(chat.chat_id)} disabled={!!busy}>
-            {busy === 'summarizing' ? 'מסכם...' : '📝 סכם עכשיו'}
-          </button>
-          {summary && (
-            <button className="btn btn-sm btn-success" style={{ flexGrow: 1 }} onClick={() => handleSendOne(chat.chat_id)} disabled={!!busy}>
-              {busy === 'sending' ? 'שולח...' : '✉️ שלח'}
-            </button>
-          )}
-        </div>
+        {isOpen && summary && (
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6, margin: '12px 0 0', paddingTop: 12, borderTop: '1px solid var(--border-color)' }}>
+            {summary.content.summary}
+          </p>
+        )}
       </div>
     );
   }
@@ -300,7 +305,7 @@ export default function HomePage() {
                   <span style={{ fontSize: '1.4rem' }}>{cat.icon}</span>
                   <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: cat.color }}>{cat.label}</h3>
                 </div>
-                <div className="feed-grid">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {inCategory.map(renderCard)}
                 </div>
               </div>
