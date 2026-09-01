@@ -47,31 +47,35 @@ function AppInner() {
   }[activeTab];
 
   return (
-    <div className="app-container">
-      <aside className="sidebar">
-        <div className="sidebar-logo">
-          <div className="sidebar-logo-icon">📊</div>
-          <div className="sidebar-logo-text">
-            <h1>בשורה התחתונה</h1>
-            <span>עבודה</span>
+    <div className="app-shell">
+      <img className="app-header-banner" src="/header-banner.png" alt="שחר-און" />
+      <div className="app-container">
+        <aside className="sidebar">
+          <div className="sidebar-logo">
+            <div className="sidebar-logo-icon">📊</div>
+            <div className="sidebar-logo-text">
+              <h1>בשורה התחתונה</h1>
+              <span>עבודה</span>
+            </div>
           </div>
-        </div>
-        <ul className="sidebar-menu">
-          {NAV_ITEMS.map(item => (
-            <li key={item.key} className={`sidebar-item ${activeTab === item.key ? 'active' : ''}`}>
-              <button onClick={() => setActiveTab(item.key)}>
-                <span className="icon">{item.icon}</span>
-                <span>{item.label}</span>
-                {item.key === 'queue' && pendingCount > 0 && <span className="sidebar-badge">{pendingCount}</span>}
-              </button>
-            </li>
-          ))}
-        </ul>
-        <div className="sidebar-footer">דשבורד וואטסאפ אישי לעבודה</div>
-      </aside>
-      <main className="main-content">
-        <Page />
-      </main>
+          <ul className="sidebar-menu">
+            {NAV_ITEMS.map(item => (
+              <li key={item.key} className={`sidebar-item ${activeTab === item.key ? 'active' : ''}`}>
+                <button onClick={() => setActiveTab(item.key)}>
+                  <span className="icon">{item.icon}</span>
+                  <span>{item.label}</span>
+                  {item.key === 'queue' && pendingCount > 0 && <span className="sidebar-badge">{pendingCount}</span>}
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="sidebar-footer">דשבורד וואטסאפ אישי לעבודה</div>
+        </aside>
+        <main className="main-content">
+          <Page />
+        </main>
+      </div>
+      <img className="app-footer-banner" src="/footer-banner.jpg" alt="שחר-און" />
     </div>
   );
 }

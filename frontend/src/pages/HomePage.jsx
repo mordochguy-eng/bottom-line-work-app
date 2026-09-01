@@ -251,7 +251,7 @@ export default function HomePage() {
     <>
       <div className="page-header">
         <div className="page-title">
-          <h2>🏠 הפיד היומי שלך</h2>
+          <h2>שחר און - בשורה התחתונה, הפיד היומי שלך</h2>
           <p>ריכוז סיכומי קבוצות הוואטסאפ במעקב</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
