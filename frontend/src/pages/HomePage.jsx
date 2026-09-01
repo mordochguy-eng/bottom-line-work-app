@@ -3,7 +3,7 @@ import { api } from '../api.js';
 import { useToast } from '../components/Toast.jsx';
 import { CATEGORIES, CATEGORY_ORDER } from '../constants/categories.js';
 
-export default function HomePage() {
+export default function HomePage({ onCompose } = {}) {
   const [chats, setChats] = useState([]);
   const [summaries, setSummaries] = useState([]);
   const [actionItems, setActionItems] = useState([]);
@@ -413,6 +413,7 @@ export default function HomePage() {
             <button className="btn btn-sm btn-primary" onClick={() => handleSummarizeOne(chat)} disabled={!!busy}>
               {busy === 'summarizing' ? 'מסכם...' : '📝 סכם עכשיו'}
             </button>
+            {onCompose && <button className="btn btn-sm" onClick={() => onCompose(chat)} title="שלח הודעה מיידית/מתוזמנת לקבוצה זו">✉️ הודעה</button>}
           </div>
 
           <span
