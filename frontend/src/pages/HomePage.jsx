@@ -13,6 +13,7 @@ export default function HomePage() {
   const [globalSummarizing, setGlobalSummarizing] = useState(false);
   const [globalProgress, setGlobalProgress] = useState(null);
   const [search, setSearch] = useState('');
+  const [expanded, setExpanded] = useState({}); // chat_id -> bool, collapsed by default to cut visual noise
 
   // Group detail modal — one modal, four tabs (mirrors the personal dashboard).
   const [detailChat, setDetailChat] = useState(null);
@@ -190,37 +191,46 @@ export default function HomePage() {
     const cat = CATEGORIES[chat.profile_type] || CATEGORIES.general;
     const busy = cardBusy[chat.chat_id];
     const updated = hasUpdate(chat);
+    const isOpen = !!expanded[chat.chat_id];
 
     return (
       <div key={chat.chat_id} className="glass-card" style={updated ? { borderRight: '4px solid var(--accent-warning)', background: 'rgba(180, 83, 9, 0.04)' } : undefined}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10, gap: 8 }}>
-          <strong
-            style={{ fontSize: '1.05rem', cursor: 'pointer' }}
-            onClick={() => openDetail(chat, 'summaries')}
-            title="פתח פרטי קבוצה"
-          >
-            {chat.name}
-          </strong>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            {updated && <span className="badge badge-warning">🆕 עדכון חדש</span>}
-            <span className={`badge ${cat.badge}`}>{cat.icon} {cat.label}</span>
-            {openCount(chat.chat_id) > 0 && <span className="badge badge-danger">{openCount(chat.chat_id)} משימות</span>}
-          </div>
-        </div>
-
-        {summary ? (
-          <>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6, marginBottom: 10 }}>
-              {summary.content.summary}
-            </p>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 12 }}>
-              <span>סיכום אחרון: {new Date(summary.created_at).toLocaleString('he-IL')}</span>
-              <span>{summary.is_sent ? '✅ נשלח לוואטסאפ' : '📥 טרם נשלח'}</span>
+        <div style={{ cursor: 'pointer' }} onClick={() => setExpanded(p => ({ ...p, [chat.chat_id]: !p[chat.chat_id] }))}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10, gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', flexShrink: 0 }}>{isOpen ? '▾' : '◂'}</span>
+              <strong
+                style={{ fontSize: '1.05rem', cursor: 'pointer' }}
+                onClick={(e) => { e.stopPropagation(); openDetail(chat, 'summaries'); }}
+                title="פתח פרטי קבוצה"
+              >
+                {chat.name}
+              </strong>
             </div>
-          </>
-        ) : (
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginBottom: 12 }}>אין עדיין סיכום לקבוצה זו.</p>
-        )}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              {updated && <span className="badge badge-warning">🆕 עדכון חדש</span>}
+              <span className={`badge ${cat.badge}`}>{cat.icon} {cat.label}</span>
+              {openCount(chat.chat_id) > 0 && <span className="badge badge-danger">{openCount(chat.chat_id)} משימות</span>}
+            </div>
+          </div>
+
+          {summary ? (
+            <>
+              <p style={{
+                color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6, marginBottom: 10,
+                ...(isOpen ? {} : { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' })
+              }}>
+                {summary.content.summary}
+              </p>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 12 }}>
+                <span>סיכום אחרון: {new Date(summary.created_at).toLocaleString('he-IL')}</span>
+                <span>{summary.is_sent ? '✅ נשלח לוואטסאפ' : '📥 טרם נשלח'}</span>
+              </div>
+            </>
+          ) : (
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginBottom: 12 }}>אין עדיין סיכום לקבוצה זו.</p>
+          )}
+        </div>
 
         <div style={{ display: 'flex', gap: 8, borderTop: '1px solid var(--border-color)', paddingTop: 12 }}>
           <button className="btn btn-sm" style={{ flexGrow: 1 }} onClick={() => openDetail(chat, 'ask')}>💬 שאל</button>
