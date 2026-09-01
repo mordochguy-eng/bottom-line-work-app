@@ -22,6 +22,14 @@ const NAV_ITEMS = [
 function AppInner() {
   const [activeTab, setActiveTab] = useState('home');
   const [pendingCount, setPendingCount] = useState(0);
+  // A group's "✉️ הודעה" shortcut sets this and jumps to the scheduled-
+  // messages tab, which opens straight into a pre-filled compose modal.
+  const [composePrefill, setComposePrefill] = useState(null);
+
+  function openComposeFor(chat) {
+    setComposePrefill({ chat_id: chat.chat_id, display_name: chat.name });
+    setActiveTab('scheduled');
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -72,7 +80,7 @@ function AppInner() {
           <div className="sidebar-footer">דשבורד וואטסאפ אישי לעבודה</div>
         </aside>
         <main className="main-content">
-          <Page />
+          <Page onCompose={openComposeFor} prefill={composePrefill} onConsumePrefill={() => setComposePrefill(null)} />
         </main>
       </div>
       <img className="app-footer-banner" src="/footer-banner.jpg" alt="שחר-און" />

@@ -25,10 +25,10 @@ const emptyForm = {
   location: { lat: '', lng: '', name: '', address: '' },
   poll_options: ['', ''], poll_multiple: false,
   contact: { phone: '', firstName: '', lastName: '' },
-  scheduled_at: '', repeat: ''
+  scheduled_at: '', repeat: '', send_now: false
 };
 
-export default function ScheduledMessagesPage() {
+export default function ScheduledMessagesPage({ prefill, onConsumePrefill } = {}) {
   const [messages, setMessages] = useState([]);
   const [chats, setChats] = useState([]);
   const [contacts, setContacts] = useState([]);
@@ -53,6 +53,16 @@ export default function ScheduledMessagesPage() {
   }
 
   useEffect(() => { load(); }, []);
+
+  // Arriving here via a group's "✉️ הודעה" shortcut — open straight into a
+  // pre-filled compose modal instead of making the user search for the
+  // recipient again.
+  useEffect(() => {
+    if (!prefill) return;
+    setForm({ ...emptyForm, query: prefill.display_name || prefill.chat_id, chat_id: prefill.chat_id, display_name: prefill.display_name || '' });
+    setModalOpen(true);
+    onConsumePrefill?.();
+  }, [prefill]);
 
   const suggestions = useMemo(() => {
     const q = form.query.trim().toLowerCase();
@@ -100,14 +110,17 @@ export default function ScheduledMessagesPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     const recipient = form.chat_id || form.query.trim();
-    if (!recipient || !form.scheduled_at) { toast('חסר נמען או מועד שליחה', 'error'); return; }
+    if (!recipient || (!form.send_now && !form.scheduled_at)) { toast('חסר נמען או מועד שליחה', 'error'); return; }
 
     const payload = {
       chat_id: recipient,
       display_name: form.display_name || null,
       type: form.type,
-      scheduled_at: new Date(form.scheduled_at).toISOString(),
-      repeat: form.repeat || null
+      // "שלח מיד" reuses the exact same scheduling path — scheduling for
+      // right now means the existing per-minute dispatcher picks it up
+      // within the next minute, well inside the 1-hour expiry window.
+      scheduled_at: form.send_now ? new Date().toISOString() : new Date(form.scheduled_at).toISOString(),
+      repeat: form.send_now ? null : (form.repeat || null)
     };
     if (form.type === 'text') {
       if (!form.content.trim()) { toast('חסר תוכן ההודעה', 'error'); return; }
@@ -380,7 +393,12 @@ export default function ScheduledMessagesPage() {
               </div>
             )}
 
-            <div className="form-row">
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.88rem', marginBottom: 14 }}>
+              <input type="checkbox" checked={form.send_now} onChange={(e) => setForm(p => ({ ...p, send_now: e.target.checked }))} />
+              🚀 שלח מיד (בתוך כדקה, בלי לתזמן)
+            </label>
+
+            <div className="form-row" style={form.send_now ? { opacity: 0.5, pointerEvents: 'none' } : undefined}>
               <div className="form-group">
                 <label className="form-label">מתי לשלוח</label>
                 <div style={{ display: 'flex', gap: 8 }}>
@@ -388,6 +406,7 @@ export default function ScheduledMessagesPage() {
                     className="form-input"
                     type="date"
                     dir="ltr"
+                    disabled={form.send_now}
                     value={form.scheduled_at.slice(0, 10)}
                     onChange={(e) => setForm(p => ({ ...p, scheduled_at: `${e.target.value}T${p.scheduled_at.slice(11, 16) || '09:00'}` }))}
                   />
@@ -396,6 +415,7 @@ export default function ScheduledMessagesPage() {
                     type="time"
                     dir="ltr"
                     style={{ maxWidth: 120 }}
+                    disabled={form.send_now}
                     value={form.scheduled_at.slice(11, 16)}
                     onChange={(e) => setForm(p => ({ ...p, scheduled_at: `${p.scheduled_at.slice(0, 10) || new Date().toISOString().slice(0, 10)}T${e.target.value}` }))}
                   />
@@ -413,7 +433,9 @@ export default function ScheduledMessagesPage() {
             </div>
 
             <div style={{ display: 'flex', gap: 10 }}>
-              <button className="btn btn-primary" type="submit" disabled={submitting}>{submitting ? 'מתזמן...' : '📆 תזמן'}</button>
+              <button className="btn btn-primary" type="submit" disabled={submitting}>
+                {submitting ? (form.send_now ? 'שולח...' : 'מתזמן...') : (form.send_now ? '🚀 שלח עכשיו' : '📆 תזמן')}
+              </button>
               <button className="btn" type="button" onClick={() => setModalOpen(false)}>ביטול</button>
             </div>
           </form>
