@@ -469,6 +469,27 @@ export default function HomePage({ onCompose } = {}) {
         </div>
       </div>
 
+      {allTracked.length > 0 && (
+        <div className="glass-card" style={{ padding: '12px 18px', marginBottom: 20, display: 'flex', gap: 22, flexWrap: 'wrap', alignItems: 'center', background: '#fff' }}>
+          <strong style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>סיכום מהיר:</strong>
+          {CATEGORY_ORDER.map(key => {
+            const inCat = tracked.filter(c => (c.profile_type || 'general') === key);
+            if (inCat.length === 0) return null;
+            const cat = CATEGORIES[key];
+            const updates = inCat.filter(hasUpdate).length;
+            const taskCount = inCat.reduce((sum, c) => sum + openCount(c.chat_id), 0);
+            return (
+              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.85rem' }}>
+                <span>{cat.icon} {cat.label}:</span>
+                {updates > 0 && <span className="badge badge-warning">🆕 {updates}</span>}
+                {taskCount > 0 && <span className="badge badge-danger">📋 {taskCount}</span>}
+                {updates === 0 && taskCount === 0 && <span style={{ color: 'var(--text-muted)' }}>אין חדש</span>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {allTracked.length === 0 ? (
         <div className="glass-card empty-state">
           <div className="empty-state-icon">💬</div>
