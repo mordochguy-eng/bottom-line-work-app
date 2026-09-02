@@ -490,11 +490,19 @@ export default function HomePage({ onCompose } = {}) {
               .sort((a, b) => (sortSnapshot[b.chat_id] ? 1 : 0) - (sortSnapshot[a.chat_id] ? 1 : 0));
             if (inCategory.length === 0) return null;
             const cat = CATEGORIES[key];
+            // A quick status line per category — so you can see whether
+            // anything needs attention without scrolling through every row.
+            const categoryUpdates = inCategory.filter(hasUpdate).length;
+            const categoryTasks = inCategory.reduce((sum, c) => sum + openCount(c.chat_id), 0);
             return (
               <div key={key}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, borderBottom: `2px solid ${cat.color}22`, paddingBottom: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, borderBottom: `2px solid ${cat.color}22`, paddingBottom: 8, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: '1.4rem' }}>{cat.icon}</span>
                   <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: cat.color }}>{cat.label}</h3>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>({inCategory.length} קבוצות)</span>
+                  <div style={{ flex: 1 }} />
+                  {categoryUpdates > 0 && <span className="badge badge-warning">🆕 {categoryUpdates} עדכונים</span>}
+                  {categoryTasks > 0 && <span className="badge badge-danger">📋 {categoryTasks} משימות</span>}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {inCategory.map(renderCard)}
