@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo, Fragment } from 'react';
 import { api } from '../api.js';
 import { useToast } from '../components/Toast.jsx';
 import SortTh from '../components/SortTh.jsx';
@@ -19,6 +19,7 @@ export default function TasksPage() {
   const [scanStatus, setScanStatus] = useState(null);
   const [pendingIds, setPendingIds] = useState([]); // ids checked but not yet applied
   const [applying, setApplying] = useState(false);
+  const [expandedContacts, setExpandedContacts] = useState(new Set());
   const toast = useToast();
 
   async function load() {
@@ -57,6 +58,18 @@ export default function TasksPage() {
   }
 
   const chatName = (chatId) => chats.find(c => c.chat_id === chatId)?.name || chatId;
+
+  // "אחראי" comes from Gemini as "who owes the action" — in a personal (1:1)
+  // chat that's almost always the person on the other side of the
+  // conversation, so it doubles as the contact's display name whenever the
+  // chat itself has no saved name. In a group chat it can be the group or a
+  // specific member, so it is NOT treated as a contact identity there.
+  function contactLabel(item) {
+    if (item.chat_id?.endsWith('@c.us') && chatName(item.chat_id) === item.chat_id) {
+      return item.assignee || item.chat_id;
+    }
+    return chatName(item.chat_id);
+  }
 
   async function handleToggleLiveInsights() {
     try {
@@ -170,6 +183,14 @@ export default function TasksPage() {
     return `https://outlook.office.com/calendar/0/deeplink/compose?${params.toString()}`;
   }
 
+  function toggleExpandContact(chatId) {
+    setExpandedContacts(prev => {
+      const next = new Set(prev);
+      if (next.has(chatId)) next.delete(chatId); else next.add(chatId);
+      return next;
+    });
+  }
+
   const filtered = items.filter(i => {
     if (directionFilter !== 'all' && (i.direction || 'my_action') !== directionFilter) return false;
     if (filter === 'completed') return i.completed;
@@ -178,6 +199,110 @@ export default function TasksPage() {
   });
 
   const { sorted, sortKey, sortDir, requestSort } = useSort(filtered, 'created_at', 'desc');
+
+  // Group personal-chat items by the contact they came from — a group chat
+  // (@g.us) is a room with many people in it, not "a conversation with one
+  // contact", so those rows are never clustered. A contact with only one
+  // open item also renders as a plain row (nothing to collapse).
+  const rows = useMemo(() => {
+    const perChatCount = new Map();
+    for (const item of sorted) {
+      if (item.chat_id?.endsWith('@c.us')) {
+        perChatCount.set(item.chat_id, (perChatCount.get(item.chat_id) || 0) + 1);
+      }
+    }
+    const seen = new Set();
+    const result = [];
+    for (const item of sorted) {
+      const clusterable = item.chat_id?.endsWith('@c.us') && perChatCount.get(item.chat_id) > 1;
+      if (!clusterable) {
+        result.push({ type: 'single', item });
+        continue;
+      }
+      if (seen.has(item.chat_id)) continue;
+      seen.add(item.chat_id);
+      result.push({ type: 'cluster', chatId: item.chat_id, members: sorted.filter(i => i.chat_id === item.chat_id) });
+    }
+    return result;
+  }, [sorted]);
+
+  function renderItemRow(item, { indented = false } = {}) {
+    return (
+      <tr key={item.id} className={indented ? 'contact-child-row' : ''}>
+        <td style={indented ? { color: 'var(--text-muted)', fontSize: '0.82rem' } : {}}>
+          {indented ? '↳' : contactLabel(item)}
+        </td>
+        <td style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{new Date(item.created_at).toLocaleString('he-IL')}</td>
+        <td style={item.completed ? { textDecoration: 'line-through', color: 'var(--text-muted)' } : {}}>
+          {item.direction && (
+            <span
+              className="badge badge-warning"
+              style={{ marginLeft: 6, fontSize: '0.7rem' }}
+              title={item.direction === 'waiting_on_them' ? 'ממתין לתשובה מהצד השני' : 'דורש פעולה שלי'}
+            >
+              {item.direction === 'waiting_on_them' ? '📤 מהם' : '📥 אצלי'}
+            </span>
+          )}
+          {item.task}
+        </td>
+        <td>{item.category ? <span className="badge badge-info">{item.category}</span> : '—'}</td>
+        <td>
+          <input
+            type="date"
+            dir="ltr"
+            className="form-input"
+            style={{ padding: '4px 6px', fontSize: '0.8rem', width: 140 }}
+            value={item.deadline || ''}
+            onChange={e => handleDeadlineChange(item, e.target.value)}
+          />
+          {item.deadline && (
+            <a href={outlookCalendarUrl(item)} target="_blank" rel="noreferrer" title="הוסף ליומן Outlook" style={{ marginRight: 6 }}>📅</a>
+          )}
+        </td>
+        <td>
+          {!item.completed && (
+            item.saved_for_later ? (
+              <button className="btn btn-sm" onClick={() => handleUnsnooze(item)} title={item.snoozed_until ? `יחזור אוטומטית ב-${new Date(item.snoozed_until).toLocaleDateString('he-IL')}` : ''}>
+                החזר לפעילות
+              </button>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {item.deadline && new Date(`${item.deadline}T00:00:00`) > new Date().setHours(0, 0, 0, 0) && (
+                  <button
+                    type="button"
+                    className="btn-icon"
+                    title="הוסף תזכורת — תופיע בתדרוך הבוקר ביום היעד"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem' }}
+                    onClick={() => handleSetReminder(item)}
+                  >🔔</button>
+                )}
+                <select
+                  className="form-select"
+                  style={{ padding: '5px 8px', fontSize: '0.78rem', width: 'auto' }}
+                  value=""
+                  onChange={(e) => { if (e.target.value) handleSnooze(item, Number(e.target.value)); }}
+                >
+                  <option value="">שמור להמשך...</option>
+                  <option value="1">תזכיר לי מחר</option>
+                  <option value="3">בעוד 3 ימים</option>
+                  <option value="5">בעוד 5 ימים</option>
+                  <option value="7">בעוד שבוע</option>
+                </select>
+              </div>
+            )
+          )}
+        </td>
+        <td>
+          <input
+            type="checkbox"
+            checked={pendingIds.includes(item.id) ? !item.completed : item.completed}
+            onChange={() => togglePending(item.id)}
+            style={{ width: 18, height: 18, outline: pendingIds.includes(item.id) ? '2px solid var(--accent-warning)' : 'none' }}
+          />
+        </td>
+      </tr>
+    );
+  }
 
   return (
     <>
@@ -294,95 +419,39 @@ export default function TasksPage() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <SortTh label="#" sortKey="id" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
+                  <SortTh label="איש קשר" sortKey="assignee" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
+                  <SortTh label="נוצר" sortKey="created_at" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
                   <SortTh label="משימה" sortKey="task" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
                   <SortTh label="קטגוריה" sortKey="category" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
-                  <SortTh label="קבוצה / מקור" sortKey="chat_id" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
-                  <SortTh label="אחראי" sortKey="assignee" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
                   <SortTh label="תאריך ביצוע" sortKey="deadline" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
-                  <SortTh label="נוצר" sortKey="created_at" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
+                  <th>תזכורת</th>
                   <th>סטטוס</th>
-                  <th></th>
                 </tr>
               </thead>
               <tbody>
-                {sorted.map(item => (
-                  <tr key={item.id}>
-                    <td className="row-id">#{item.id}</td>
-                    <td style={item.completed ? { textDecoration: 'line-through', color: 'var(--text-muted)' } : {}}>
-                      {item.direction && (
-                        <span
-                          className="badge badge-warning"
-                          style={{ marginLeft: 6, fontSize: '0.7rem' }}
-                          title={item.direction === 'waiting_on_them' ? 'ממתין לתשובה מהצד השני' : 'דורש פעולה שלי'}
-                        >
-                          {item.direction === 'waiting_on_them' ? '📤 מהם' : '📥 אצלי'}
-                        </span>
-                      )}
-                      {item.task}
-                    </td>
-                    <td>{item.category ? <span className="badge badge-info">{item.category}</span> : '—'}</td>
-                    <td>
-                      {item.chat_id?.endsWith('@c.us') && chatName(item.chat_id) === item.chat_id
-                        ? `שיחה עם ${item.assignee || item.chat_id}`
-                        : chatName(item.chat_id)}
-                    </td>
-                    <td>{item.assignee || '—'}</td>
-                    <td>
-                      <input
-                        type="date"
-                        dir="ltr"
-                        className="form-input"
-                        style={{ padding: '4px 6px', fontSize: '0.8rem', width: 140 }}
-                        value={item.deadline || ''}
-                        onChange={e => handleDeadlineChange(item, e.target.value)}
-                      />
-                      {item.deadline && (
-                        <a href={outlookCalendarUrl(item)} target="_blank" rel="noreferrer" title="הוסף ליומן Outlook" style={{ marginRight: 6 }}>📅</a>
-                      )}
-                      {item.deadline && !item.saved_for_later && new Date(`${item.deadline}T00:00:00`) > new Date().setHours(0, 0, 0, 0) && (
-                        <button
-                          type="button"
-                          className="btn-icon"
-                          title="הוסף תזכורת — תופיע בתדרוך הבוקר ביום היעד"
-                          style={{ marginRight: 6, background: 'none', border: 'none', cursor: 'pointer' }}
-                          onClick={() => handleSetReminder(item)}
-                        >🔔</button>
-                      )}
-                    </td>
-                    <td style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{new Date(item.created_at).toLocaleString('he-IL')}</td>
-                    <td>
-                      <input
-                        type="checkbox"
-                        checked={pendingIds.includes(item.id) ? !item.completed : item.completed}
-                        onChange={() => togglePending(item.id)}
-                        style={{ width: 18, height: 18, outline: pendingIds.includes(item.id) ? '2px solid var(--accent-warning)' : 'none' }}
-                      />
-                    </td>
-                    <td>
-                      {!item.completed && (
-                        item.saved_for_later ? (
-                          <button className="btn btn-sm" onClick={() => handleUnsnooze(item)} title={item.snoozed_until ? `יחזור אוטומטית ב-${new Date(item.snoozed_until).toLocaleDateString('he-IL')}` : ''}>
-                            החזר לפעילות
-                          </button>
-                        ) : (
-                          <select
-                            className="form-select"
-                            style={{ padding: '5px 8px', fontSize: '0.78rem', width: 'auto' }}
-                            value=""
-                            onChange={(e) => { if (e.target.value) handleSnooze(item, Number(e.target.value)); }}
-                          >
-                            <option value="">שמור להמשך...</option>
-                            <option value="1">תזכיר לי מחר</option>
-                            <option value="3">בעוד 3 ימים</option>
-                            <option value="5">בעוד 5 ימים</option>
-                            <option value="7">בעוד שבוע</option>
-                          </select>
-                        )
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {rows.map(row => {
+                  if (row.type === 'single') return renderItemRow(row.item);
+
+                  const { chatId, members } = row;
+                  const isOpen = expandedContacts.has(chatId);
+                  const overdueCount = members.filter(m => !m.completed && m.deadline && new Date(`${m.deadline}T00:00:00`) < new Date().setHours(0, 0, 0, 0)).length;
+                  return (
+                    <Fragment key={`group-${chatId}`}>
+                      <tr className="contact-group-row" onClick={() => toggleExpandContact(chatId)}>
+                        <td>
+                          <span className={`contact-group-chevron ${isOpen ? 'open' : ''}`}>▶</span>
+                          {contactLabel(members[0])}
+                        </td>
+                        <td colSpan={6} style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                          <span className="badge badge-info" style={{ marginLeft: 8 }}>{members.length} פניות</span>
+                          {overdueCount > 0 && <span className="badge badge-danger" style={{ marginLeft: 8 }}>{overdueCount} באיחור</span>}
+                          {isOpen ? 'לחץ לכיווץ' : 'לחץ להרחבה'}
+                        </td>
+                      </tr>
+                      {isOpen && members.map(member => renderItemRow(member, { indented: true }))}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
