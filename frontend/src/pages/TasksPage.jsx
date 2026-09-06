@@ -7,6 +7,7 @@ import { useSort } from '../hooks/useSort.js';
 export default function TasksPage() {
   const [items, setItems] = useState([]);
   const [chats, setChats] = useState([]);
+  const [contacts, setContacts] = useState([]);
   const [settings, setSettings] = useState({});
   const [filter, setFilter] = useState('active'); // active | saved | completed
   const [directionFilter, setDirectionFilter] = useState('all'); // all | waiting_on_them | my_action
@@ -19,15 +20,19 @@ export default function TasksPage() {
   const [scanStatus, setScanStatus] = useState(null);
   const [pendingIds, setPendingIds] = useState([]); // ids checked but not yet applied
   const [applying, setApplying] = useState(false);
-  const [expandedContacts, setExpandedContacts] = useState(new Set());
+  // Groups are open by default (the point of grouping is to see everything
+  // at once with a clear indent, not to hide it) — this tracks which ones
+  // were manually collapsed, so the common case needs zero state.
+  const [collapsedContacts, setCollapsedContacts] = useState(new Set());
   const toast = useToast();
 
   async function load() {
     setLoading(true);
     try {
-      const [a, c, s] = await Promise.all([api.getActionItems(), api.getChats(), api.getSettings()]);
+      const [a, c, ct, s] = await Promise.all([api.getActionItems(), api.getChats(), api.getWhatsappContacts(), api.getSettings()]);
       setItems(a);
       setChats(c);
+      setContacts(ct);
       setSettings(s);
     } catch (err) { toast(err.message, 'error'); } finally { setLoading(false); }
   }
@@ -58,17 +63,26 @@ export default function TasksPage() {
   }
 
   const chatName = (chatId) => chats.find(c => c.chat_id === chatId)?.name || chatId;
+  const contactByChatId = useMemo(() => new Map(contacts.map(c => [c.chat_id, c])), [contacts]);
 
   // "אחראי" comes from Gemini as "who owes the action" — in a personal (1:1)
   // chat that's almost always the person on the other side of the
-  // conversation, so it doubles as the contact's display name whenever the
-  // chat itself has no saved name. In a group chat it can be the group or a
-  // specific member, so it is NOT treated as a contact identity there.
-  function contactLabel(item) {
-    if (item.chat_id?.endsWith('@c.us') && chatName(item.chat_id) === item.chat_id) {
-      return item.assignee || item.chat_id;
+  // conversation, so it doubles as the contact's display name whenever
+  // Green API's real phone-book has no better name for that number. In a
+  // group chat it can be the group or a specific member, so it is NOT
+  // treated as a contact identity there.
+  //
+  // isSaved distinguishes a real phone-book save (contactName) from a name
+  // pulled from the conversation itself (Gemini's guess, or a self-set
+  // WhatsApp profile name) — the same person you're texting could be a
+  // total stranger, and the name alone doesn't tell you that.
+  function contactInfo(item) {
+    if (item.chat_id?.endsWith('@c.us')) {
+      const known = contactByChatId.get(item.chat_id);
+      if (known) return { label: known.name, isSaved: known.isSaved };
+      return { label: item.assignee || item.chat_id, isSaved: false };
     }
-    return chatName(item.chat_id);
+    return { label: chatName(item.chat_id), isSaved: null }; // group — not a person
   }
 
   async function handleToggleLiveInsights() {
@@ -183,12 +197,26 @@ export default function TasksPage() {
     return `https://outlook.office.com/calendar/0/deeplink/compose?${params.toString()}`;
   }
 
-  function toggleExpandContact(chatId) {
-    setExpandedContacts(prev => {
+  function toggleCollapseContact(chatId) {
+    setCollapsedContacts(prev => {
       const next = new Set(prev);
       if (next.has(chatId)) next.delete(chatId); else next.add(chatId);
       return next;
     });
+  }
+
+  // A small icon next to a person's name showing whether it's a verified
+  // phone-book contact or just a name pulled from the conversation/profile.
+  function ContactBadge({ isSaved }) {
+    if (isSaved === null) return null; // group chat — not applicable
+    return (
+      <span
+        title={isSaved ? 'איש קשר שמור' : 'לא באנשי הקשר שלי — השם מהשיחה בלבד'}
+        style={{ marginLeft: 5, fontSize: '0.85em', opacity: isSaved ? 0.9 : 1 }}
+      >
+        {isSaved ? '👤' : '❓'}
+      </span>
+    );
   }
 
   const filtered = items.filter(i => {
@@ -230,7 +258,7 @@ export default function TasksPage() {
     return (
       <tr key={item.id} className={indented ? 'contact-child-row' : ''}>
         <td style={indented ? { color: 'var(--text-muted)', fontSize: '0.82rem' } : {}}>
-          {indented ? '↳' : contactLabel(item)}
+          {indented ? '↳' : (<>{contactInfo(item).label}<ContactBadge isSaved={contactInfo(item).isSaved} /></>)}
         </td>
         <td style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{new Date(item.created_at).toLocaleString('he-IL')}</td>
         <td style={item.completed ? { textDecoration: 'line-through', color: 'var(--text-muted)' } : {}}>
@@ -433,14 +461,15 @@ export default function TasksPage() {
                   if (row.type === 'single') return renderItemRow(row.item);
 
                   const { chatId, members } = row;
-                  const isOpen = expandedContacts.has(chatId);
+                  const isOpen = !collapsedContacts.has(chatId);
+                  const info = contactInfo(members[0]);
                   const overdueCount = members.filter(m => !m.completed && m.deadline && new Date(`${m.deadline}T00:00:00`) < new Date().setHours(0, 0, 0, 0)).length;
                   return (
                     <Fragment key={`group-${chatId}`}>
-                      <tr className="contact-group-row" onClick={() => toggleExpandContact(chatId)}>
+                      <tr className="contact-group-row" onClick={() => toggleCollapseContact(chatId)}>
                         <td>
                           <span className={`contact-group-chevron ${isOpen ? 'open' : ''}`}>▶</span>
-                          {contactLabel(members[0])}
+                          {info.label}<ContactBadge isSaved={info.isSaved} />
                         </td>
                         <td colSpan={6} style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>
                           <span className="badge badge-info" style={{ marginLeft: 8 }}>{members.length} פניות</span>

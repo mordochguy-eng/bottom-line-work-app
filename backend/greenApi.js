@@ -219,7 +219,14 @@ export async function getIndividualContacts(apiUrl, idInstance, apiTokenInstance
   const raw = await getContacts(apiUrl, idInstance, apiTokenInstance);
   return raw
     .filter(c => c.type === 'user' && c.id?.endsWith('@c.us'))
-    .map(c => ({ chat_id: c.id, name: c.contactName?.trim() || c.name?.trim() || c.id }));
+    .map(c => ({
+      chat_id: c.id,
+      name: c.contactName?.trim() || c.name?.trim() || c.id,
+      // contactName (not name) reflects a real phone-book save — see the
+      // same distinction in historyScan.js. name-only is a WhatsApp profile
+      // name anyone can set, including a total stranger.
+      isSaved: !!c.contactName?.trim()
+    }));
 }
 
 // ---------- Notification queue polling (used for the auto-reply feature) ----------
