@@ -197,6 +197,25 @@ export default function TasksPage() {
     return `https://outlook.office.com/calendar/0/deeplink/compose?${params.toString()}`;
   }
 
+  // wa.me only knows how to open a chat by phone number — there's no public
+  // deep link to jump straight into an existing group, so this is
+  // individuals only (returns null for a group chat_id).
+  function whatsappUrl(chatId) {
+    if (!chatId?.endsWith('@c.us')) return null;
+    const digits = chatId.replace('@c.us', '');
+    return `https://wa.me/${digits}`;
+  }
+
+  async function handleCompleteGroup(members) {
+    const toComplete = members.filter(m => !m.completed);
+    if (toComplete.length === 0) return;
+    try {
+      for (const m of toComplete) await api.toggleActionItem(m.id, true);
+      toast(`${toComplete.length} משימות סומנו כבוצעו`, 'success');
+      await load();
+    } catch (err) { toast(err.message, 'error'); }
+  }
+
   function toggleCollapseContact(chatId) {
     setCollapsedContacts(prev => {
       const next = new Set(prev);
@@ -259,7 +278,14 @@ export default function TasksPage() {
     return (
       <tr key={item.id} className={rowClass}>
         <td style={indented ? { color: 'var(--text-muted)', fontSize: '0.82rem' } : {}}>
-          {indented ? '↳' : (<>{contactInfo(item).label}<ContactBadge isSaved={contactInfo(item).isSaved} /></>)}
+          {indented ? '↳' : (
+            <>
+              {contactInfo(item).label}<ContactBadge isSaved={contactInfo(item).isSaved} />
+              {whatsappUrl(item.chat_id) && (
+                <a href={whatsappUrl(item.chat_id)} target="_blank" rel="noreferrer" title="פתח שיחה בוואטסאפ" style={{ marginRight: 6 }}>💬</a>
+              )}
+            </>
+          )}
         </td>
         <td style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{new Date(item.created_at).toLocaleString('he-IL')}</td>
         <td style={item.completed ? { textDecoration: 'line-through', color: 'var(--text-muted)' } : {}}>
@@ -276,50 +302,50 @@ export default function TasksPage() {
         </td>
         <td>{item.category ? <span className="badge badge-info">{item.category}</span> : '—'}</td>
         <td>
-          <input
-            type="date"
-            dir="ltr"
-            className="form-input"
-            style={{ padding: '4px 6px', fontSize: '0.8rem', width: 140 }}
-            value={item.deadline || ''}
-            onChange={e => handleDeadlineChange(item, e.target.value)}
-          />
-          {item.deadline && (
-            <a href={outlookCalendarUrl(item)} target="_blank" rel="noreferrer" title="הוסף ליומן Outlook" style={{ marginRight: 6 }}>📅</a>
-          )}
-        </td>
-        <td>
-          {!item.completed && (
-            item.saved_for_later ? (
-              <button className="btn btn-sm" onClick={() => handleUnsnooze(item)} title={item.snoozed_until ? `יחזור אוטומטית ב-${new Date(item.snoozed_until).toLocaleDateString('he-IL')}` : ''}>
-                החזר לפעילות
-              </button>
-            ) : (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                {item.deadline && new Date(`${item.deadline}T00:00:00`) > new Date().setHours(0, 0, 0, 0) && (
-                  <button
-                    type="button"
-                    className="btn-icon"
-                    title="הוסף תזכורת — תופיע בתדרוך הבוקר ביום היעד"
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem' }}
-                    onClick={() => handleSetReminder(item)}
-                  >🔔</button>
-                )}
-                <select
-                  className="form-select"
-                  style={{ padding: '5px 8px', fontSize: '0.78rem', width: 'auto' }}
-                  value=""
-                  onChange={(e) => { if (e.target.value) handleSnooze(item, Number(e.target.value)); }}
-                >
-                  <option value="">שמור להמשך...</option>
-                  <option value="1">תזכיר לי מחר</option>
-                  <option value="3">בעוד 3 ימים</option>
-                  <option value="5">בעוד 5 ימים</option>
-                  <option value="7">בעוד שבוע</option>
-                </select>
-              </div>
-            )
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <input
+              type="date"
+              dir="ltr"
+              className="form-input"
+              style={{ padding: '4px 6px', fontSize: '0.8rem', width: 140 }}
+              value={item.deadline || ''}
+              onChange={e => handleDeadlineChange(item, e.target.value)}
+            />
+            {item.deadline && (
+              <a href={outlookCalendarUrl(item)} target="_blank" rel="noreferrer" title="הוסף ליומן Outlook">📅</a>
+            )}
+            {!item.completed && (
+              item.saved_for_later ? (
+                <button className="btn btn-sm" onClick={() => handleUnsnooze(item)} title={item.snoozed_until ? `יחזור אוטומטית ב-${new Date(item.snoozed_until).toLocaleDateString('he-IL')}` : ''}>
+                  🔔 החזר לפעילות
+                </button>
+              ) : (
+                <>
+                  {item.deadline && new Date(`${item.deadline}T00:00:00`) > new Date().setHours(0, 0, 0, 0) && (
+                    <button
+                      type="button"
+                      className="btn-icon"
+                      title="הוסף תזכורת — תופיע בתדרוך הבוקר ביום היעד"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem' }}
+                      onClick={() => handleSetReminder(item)}
+                    >🔔</button>
+                  )}
+                  <select
+                    className="form-select"
+                    style={{ padding: '5px 8px', fontSize: '0.78rem', width: 'auto' }}
+                    value=""
+                    onChange={(e) => { if (e.target.value) handleSnooze(item, Number(e.target.value)); }}
+                  >
+                    <option value="">שמור להמשך...</option>
+                    <option value="1">תזכיר לי מחר</option>
+                    <option value="3">בעוד 3 ימים</option>
+                    <option value="5">בעוד 5 ימים</option>
+                    <option value="7">בעוד שבוע</option>
+                  </select>
+                </>
+              )
+            )}
+          </div>
         </td>
         <td>
           <input
@@ -452,8 +478,7 @@ export default function TasksPage() {
                   <SortTh label="נוצר" sortKey="created_at" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
                   <SortTh label="משימה" sortKey="task" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
                   <SortTh label="קטגוריה" sortKey="category" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
-                  <SortTh label="תאריך ביצוע" sortKey="deadline" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
-                  <th>תזכורת</th>
+                  <SortTh label="יעד ותזכורת" sortKey="deadline" currentKey={sortKey} currentDir={sortDir} onSort={requestSort} />
                   <th>סטטוס</th>
                 </tr>
               </thead>
@@ -475,11 +500,23 @@ export default function TasksPage() {
                           <td>
                             <span className={`contact-group-chevron ${isOpen ? 'open' : ''}`}>▶</span>
                             {info.label}<ContactBadge isSaved={info.isSaved} />
+                            {whatsappUrl(chatId) && (
+                              <a href={whatsappUrl(chatId)} target="_blank" rel="noreferrer" title="פתח שיחה בוואטסאפ" style={{ marginRight: 6 }} onClick={e => e.stopPropagation()}>💬</a>
+                            )}
                           </td>
-                          <td colSpan={6} style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                          <td colSpan={5} style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>
                             <span className="badge badge-info" style={{ marginLeft: 8 }}>{members.length} פניות</span>
                             {overdueCount > 0 && <span className="badge badge-danger" style={{ marginLeft: 8 }}>{overdueCount} באיחור</span>}
                             {isOpen ? 'לחץ לכיווץ' : 'לחץ להרחבה'}
+                            {members.some(m => !m.completed) && (
+                              <button
+                                className="btn btn-sm btn-success"
+                                style={{ marginRight: 12 }}
+                                onClick={e => { e.stopPropagation(); handleCompleteGroup(members); }}
+                              >
+                                ✅ סמן הכל כבוצע
+                              </button>
+                            )}
                           </td>
                         </tr>
                         {isOpen && members.map((member, i) => renderItemRow(member, { indented: true, clusterClass, isLastInCluster: i === members.length - 1 }))}
