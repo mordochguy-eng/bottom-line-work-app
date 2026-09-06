@@ -18,6 +18,7 @@ export default function TasksPage() {
   const [scanSegments, setScanSegments] = useState({ namedAndGroups: true, unsavedIndividuals: true });
   const [scanExtractTasks, setScanExtractTasks] = useState(true);
   const [scanStatus, setScanStatus] = useState(null);
+  const [showAdvancedScan, setShowAdvancedScan] = useState(false);
   const [pendingIds, setPendingIds] = useState([]); // ids checked but not yet applied
   const [applying, setApplying] = useState(false);
   // Groups are open by default (the point of grouping is to see everything
@@ -370,7 +371,22 @@ export default function TasksPage() {
           <button className="btn" onClick={handleSyncNow} disabled={syncing}>
             {syncing ? 'מסנכרן...' : '🔄 סנכרן עכשיו'}
           </button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.88rem', fontWeight: 600 }}>
+            🎧 האזנה חיה {settings.liveInsightsEnabled ? 'פעילה' : 'כבויה'}
+            <label className="switch">
+              <input type="checkbox" checked={!!settings.liveInsightsEnabled} onChange={handleToggleLiveInsights} />
+              <span className="slider"></span>
+            </label>
+          </label>
+          <button className="btn btn-sm" onClick={() => setShowAdvancedScan(p => !p)}>
+            {showAdvancedScan ? '▲ ' : '▼ '}⚙️ ניתוח היסטוריה
+          </button>
+        </div>
+      </div>
+
+      {showAdvancedScan && (
+        <div className="glass-card" style={{ marginBottom: 18, padding: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
             <select className="form-select" style={{ padding: '9px 10px', width: 'auto' }} value={scanDays} onChange={(e) => setScanDays(Number(e.target.value))}>
               <option value={1}>יום אחרון</option>
               <option value={3}>3 ימים</option>
@@ -392,36 +408,29 @@ export default function TasksPage() {
               {scanStatus?.running ? 'סורק...' : '🔍 נתח היסטוריה'}
             </button>
           </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.88rem', fontWeight: 600 }}>
-            🎧 האזנה חיה {settings.liveInsightsEnabled ? 'פעילה' : 'כבויה'}
-            <label className="switch">
-              <input type="checkbox" checked={!!settings.liveInsightsEnabled} onChange={handleToggleLiveInsights} />
-              <span className="slider"></span>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap', marginBottom: 12, fontSize: '0.85rem' }}>
+            <span style={{ color: 'var(--text-muted)' }}>פלחים לסריקה:</span>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input type="checkbox" checked={scanSegments.namedAndGroups} onChange={(e) => setScanSegments(p => ({ ...p, namedAndGroups: e.target.checked }))} />
+              אנשי קשר שמורים + קבוצות
             </label>
-          </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input type="checkbox" checked={scanSegments.unsavedIndividuals} onChange={(e) => setScanSegments(p => ({ ...p, unsavedIndividuals: e.target.checked }))} />
+              צ'אטים אישיים לא שמורים
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input type="checkbox" checked={scanExtractTasks} onChange={(e) => setScanExtractTasks(e.target.checked)} />
+              גם ליצור משימות (לא רק לאפיין שאלות)
+            </label>
+          </div>
+
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', margin: 0 }}>
+            כשההאזנה פעילה, כל הודעה נכנסת (בקבוצות ובצ'אטים אישיים) נבדקת אוטומטית ברקע — כשהתור ריק היא נבדקת כל כמה שניות, וכשמצטברות כמה הודעות ביחד היא מרוקנת אותן ברצף מהיר. "סנכרן עכשיו" מריק את התור מיידית בלי לחכות, כולל כל מה שהצטבר מאז הפעם האחרונה (Green API שומר את התור גם כשההאזנה כבויה, לזמן מוגבל).
+            "נתח היסטוריה" סורק את הפלחים שנבחרו ומחפש בכל אחד שאלות שחוזרות על עצמן, כדי להציע שאלות נפוצות (FAQ) ללשונית "תור אישור תגובות". ביטול "גם ליצור משימות" מריץ רק את איסוף השאלות לאפיון — הרבה יותר מהיר, בלי ליצור משימות לפניות ישנות. משימות כפולות מדולגות אוטומטית.
+          </p>
         </div>
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap', marginBottom: 10, fontSize: '0.85rem' }}>
-        <span style={{ color: 'var(--text-muted)' }}>פלחים לסריקה:</span>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <input type="checkbox" checked={scanSegments.namedAndGroups} onChange={(e) => setScanSegments(p => ({ ...p, namedAndGroups: e.target.checked }))} />
-          אנשי קשר שמורים + קבוצות
-        </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <input type="checkbox" checked={scanSegments.unsavedIndividuals} onChange={(e) => setScanSegments(p => ({ ...p, unsavedIndividuals: e.target.checked }))} />
-          צ'אטים אישיים לא שמורים
-        </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <input type="checkbox" checked={scanExtractTasks} onChange={(e) => setScanExtractTasks(e.target.checked)} />
-          גם ליצור משימות (לא רק לאפיין שאלות)
-        </label>
-      </div>
-
-      <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: 0, marginBottom: 10 }}>
-        כשההאזנה פעילה, כל הודעה נכנסת (בקבוצות ובצ'אטים אישיים) נבדקת אוטומטית ברקע — כשהתור ריק היא נבדקת כל כמה שניות, וכשמצטברות כמה הודעות ביחד היא מרוקנת אותן ברצף מהיר. "סנכרן עכשיו" מריק את התור מיידית בלי לחכות, כולל כל מה שהצטבר מאז הפעם האחרונה (Green API שומר את התור גם כשההאזנה כבויה, לזמן מוגבל).
-        "נתח היסטוריה" סורק את הפלחים שנבחרו ומחפש בכל אחד שאלות שחוזרות על עצמן, כדי להציע שאלות נפוצות (FAQ) ללשונית "תור אישור תגובות". ביטול "גם ליצור משימות" מריץ רק את איסוף השאלות לאפיון — הרבה יותר מהיר, בלי ליצור משימות לפניות ישנות. משימות כפולות מדולגות אוטומטית.
-      </p>
+      )}
 
       {scanStatus && (scanStatus.running || scanStatus.finishedAt) && (
         <div className="glass-card" style={{ marginBottom: 18, padding: 16 }}>
