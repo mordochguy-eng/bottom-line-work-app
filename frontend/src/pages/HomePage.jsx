@@ -224,28 +224,32 @@ export default function HomePage({ onCompose } = {}) {
                     </button>
                   </div>
                 ) : (
+                  // One flowing list, separated by a date line — a card per
+                  // date turned a few summaries into a long wall of boxes.
                   data.summaries.map((sum, index) => (
-                    <div key={sum.id} className="glass-card" style={{ marginBottom: 16, background: '#fff', borderRight: index === 0 ? '4px solid var(--accent-primary)' : '1px solid var(--border-color)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, borderBottom: '1px solid var(--border-color)', paddingBottom: 10, flexWrap: 'wrap', gap: 8 }}>
-                        <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>
-                          תאריך סיכום: {new Date(sum.created_at).toLocaleString('he-IL')}
-                          {index === 0 && <span className="badge badge-info" style={{ marginRight: 8 }}>הכי חדש</span>}
+                    <div key={sum.id} style={{ marginBottom: 18 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', paddingBottom: 6, marginBottom: 10, borderBottom: '1px solid var(--border-color)' }}>
+                        <span style={{ fontWeight: 700, fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                          {new Date(sum.created_at).toLocaleString('he-IL')}
                         </span>
-                        <button
-                          className="btn btn-sm btn-success"
-                          onClick={() => handleSendSpecificSummary(chat.chat_id, sum.id)}
-                          disabled={busy === `sending:${sum.id}`}
-                        >
-                          {busy === `sending:${sum.id}` ? 'שולח...' : '✉️ שלח סיכום זה לוואטסאפ שלי'}
-                        </button>
+                        {index === 0 && <span className="badge badge-info">הכי חדש</span>}
+                        <div style={{ flex: 1 }} />
+                        {index === 0 && (
+                          <button
+                            className="btn btn-sm"
+                            onClick={() => handleSendSpecificSummary(chat.chat_id, sum.id)}
+                            disabled={busy === `sending:${sum.id}`}
+                          >
+                            {busy === `sending:${sum.id}` ? 'שולח...' : '✉️ שלח לוואטסאפ'}
+                          </button>
+                        )}
                       </div>
-                      <p style={{ lineHeight: 1.6, marginBottom: 16 }}><strong>תקציר מנהלים:</strong> {sum.content.summary}</p>
+                      <p style={{ lineHeight: 1.6, marginBottom: sum.content.topics?.length ? 12 : 0 }}>{sum.content.summary}</p>
                       {sum.content.topics?.length > 0 && (
                         <div>
-                          <h4 style={{ fontSize: '0.9rem', fontWeight: 700, borderBottom: '1px solid var(--border-color)', paddingBottom: 6, marginBottom: 10 }}>נושאים מרכזיים</h4>
                           {sum.content.topics.map((t, idx) => (
-                            <div key={idx} style={{ marginBottom: 10 }}>
-                              <div style={{ fontWeight: 600, fontSize: '0.88rem', marginBottom: 4 }}>{t.topic}</div>
+                            <div key={idx} style={{ marginBottom: 8 }}>
+                              <div style={{ fontWeight: 600, fontSize: '0.86rem', marginBottom: 3 }}>{t.topic}</div>
                               <ul style={{ margin: 0, paddingRight: 20, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                                 {t.bullets?.map((b, bIdx) => <li key={bIdx}>{b}</li>)}
                               </ul>
