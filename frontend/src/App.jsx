@@ -20,7 +20,7 @@ const NAV_ITEMS = [
 ];
 
 function AppInner() {
-  const [activeTab, setActiveTab] = useState('home');
+  const [activeTab, setActiveTab] = useState('tasks');
   const [pendingCount, setPendingCount] = useState(0);
   // A group's "✉️ הודעה" shortcut sets this and jumps to the scheduled-
   // messages tab, which opens straight into a pre-filled compose modal.
