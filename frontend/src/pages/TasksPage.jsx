@@ -254,9 +254,10 @@ export default function TasksPage() {
     return result;
   }, [sorted]);
 
-  function renderItemRow(item, { indented = false } = {}) {
+  function renderItemRow(item, { indented = false, clusterClass = '', isLastInCluster = false } = {}) {
+    const rowClass = [indented ? 'contact-child-row' : '', clusterClass, isLastInCluster ? 'contact-cluster-last' : ''].filter(Boolean).join(' ');
     return (
-      <tr key={item.id} className={indented ? 'contact-child-row' : ''}>
+      <tr key={item.id} className={rowClass}>
         <td style={indented ? { color: 'var(--text-muted)', fontSize: '0.82rem' } : {}}>
           {indented ? '↳' : (<>{contactInfo(item).label}<ContactBadge isSaved={contactInfo(item).isSaved} /></>)}
         </td>
@@ -457,30 +458,35 @@ export default function TasksPage() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map(row => {
-                  if (row.type === 'single') return renderItemRow(row.item);
+                {(() => {
+                  let clusterIndex = 0;
+                  return rows.map(row => {
+                    if (row.type === 'single') return renderItemRow(row.item);
 
-                  const { chatId, members } = row;
-                  const isOpen = !collapsedContacts.has(chatId);
-                  const info = contactInfo(members[0]);
-                  const overdueCount = members.filter(m => !m.completed && m.deadline && new Date(`${m.deadline}T00:00:00`) < new Date().setHours(0, 0, 0, 0)).length;
-                  return (
-                    <Fragment key={`group-${chatId}`}>
-                      <tr className="contact-group-row" onClick={() => toggleCollapseContact(chatId)}>
-                        <td>
-                          <span className={`contact-group-chevron ${isOpen ? 'open' : ''}`}>▶</span>
-                          {info.label}<ContactBadge isSaved={info.isSaved} />
-                        </td>
-                        <td colSpan={6} style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>
-                          <span className="badge badge-info" style={{ marginLeft: 8 }}>{members.length} פניות</span>
-                          {overdueCount > 0 && <span className="badge badge-danger" style={{ marginLeft: 8 }}>{overdueCount} באיחור</span>}
-                          {isOpen ? 'לחץ לכיווץ' : 'לחץ להרחבה'}
-                        </td>
-                      </tr>
-                      {isOpen && members.map(member => renderItemRow(member, { indented: true }))}
-                    </Fragment>
-                  );
-                })}
+                    const { chatId, members } = row;
+                    const clusterClass = clusterIndex % 2 === 0 ? 'contact-cluster-a' : 'contact-cluster-b';
+                    clusterIndex++;
+                    const isOpen = !collapsedContacts.has(chatId);
+                    const info = contactInfo(members[0]);
+                    const overdueCount = members.filter(m => !m.completed && m.deadline && new Date(`${m.deadline}T00:00:00`) < new Date().setHours(0, 0, 0, 0)).length;
+                    return (
+                      <Fragment key={`group-${chatId}`}>
+                        <tr className={`contact-group-row ${clusterClass}`} onClick={() => toggleCollapseContact(chatId)}>
+                          <td>
+                            <span className={`contact-group-chevron ${isOpen ? 'open' : ''}`}>▶</span>
+                            {info.label}<ContactBadge isSaved={info.isSaved} />
+                          </td>
+                          <td colSpan={6} style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                            <span className="badge badge-info" style={{ marginLeft: 8 }}>{members.length} פניות</span>
+                            {overdueCount > 0 && <span className="badge badge-danger" style={{ marginLeft: 8 }}>{overdueCount} באיחור</span>}
+                            {isOpen ? 'לחץ לכיווץ' : 'לחץ להרחבה'}
+                          </td>
+                        </tr>
+                        {isOpen && members.map((member, i) => renderItemRow(member, { indented: true, clusterClass, isLastInCluster: i === members.length - 1 }))}
+                      </Fragment>
+                    );
+                  });
+                })()}
               </tbody>
             </table>
           </div>

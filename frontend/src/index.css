@@ -190,6 +190,18 @@ input:checked + .slider:before { transform: translateX(19px); }
 .contact-child-row td { background: rgba(15, 23, 42, 0.015); }
 .contact-child-row td:first-child { padding-right: 26px; }
 
+/* A colored accent bar down the start edge, shared by a contact's header
+   row and all its task rows, plus a closing line under the last one — so
+   the whole cluster reads as one visually framed unit instead of loose
+   rows that merely happen to sit near each other. Two alternating hues
+   keep adjacent contacts from blurring into a single block. */
+.contact-cluster-a td:first-child { border-inline-start: 3px solid var(--accent-primary); }
+.contact-cluster-b td:first-child { border-inline-start: 3px solid var(--accent-info); }
+.contact-cluster-a.contact-group-row td { background: rgba(79, 70, 229, 0.05); }
+.contact-cluster-b.contact-group-row td { background: rgba(3, 105, 161, 0.05); }
+.contact-cluster-b.contact-child-row td { background: rgba(3, 105, 161, 0.02); }
+.contact-cluster-last td { border-bottom: 2px solid var(--border-color); }
+
 .sortable-th { cursor: pointer; user-select: none; transition: background-color 0.15s ease, color 0.15s ease; white-space: nowrap; }
 .sortable-th:hover { background-color: rgba(15, 23, 42, 0.04); color: var(--accent-primary); }
 .sort-icon { margin-right: 6px; display: inline-block; font-size: 0.65rem; color: var(--accent-primary); vertical-align: middle; }
