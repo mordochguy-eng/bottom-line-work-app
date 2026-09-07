@@ -158,10 +158,13 @@ export default function ScheduledMessagesPage({ prefill, onConsumePrefill } = {}
 
     setSubmitting(true);
     try {
-      // One scheduled-message row per recipient — same content and timing, sent independently.
-      await Promise.all(form.recipients.map(r =>
-        api.createScheduledMessage({ ...base, chat_id: r.chat_id, display_name: r.label || null })
-      ));
+      // One scheduled-message row per recipient, created one at a time —
+      // both the local store and the Worker keep the whole list as a single
+      // blob (read, append, write back), so firing these concurrently races:
+      // whichever write lands last wins and silently drops the others.
+      for (const r of form.recipients) {
+        await api.createScheduledMessage({ ...base, chat_id: r.chat_id, display_name: r.label || null });
+      }
       toast(form.recipients.length > 1 ? `ההודעה תוזמנה ל-${form.recipients.length} נמענים` : 'ההודעה תוזמנה', 'success');
       setModalOpen(false);
       resetForm();
