@@ -301,18 +301,27 @@ export default function TasksPage() {
             </div>
           )}
         </td>
-        <td style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{new Date(item.created_at).toLocaleString('he-IL')}</td>
+        <td style={{ fontSize: '0.78rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{new Date(item.created_at).toLocaleString('he-IL')}</td>
         <td style={item.completed ? { textDecoration: 'line-through', color: 'var(--text-muted)' } : {}}>
-          {item.direction && (
-            <span
-              className="badge badge-warning"
-              style={{ marginLeft: 6, fontSize: '0.7rem' }}
-              title={item.direction === 'waiting_on_them' ? 'ממתין לתשובה מהצד השני' : 'דורש פעולה שלי'}
-            >
-              {item.direction === 'waiting_on_them' ? '📤 מהם' : '📥 אצלי'}
+          {/* A fixed-width slot for the direction badge (empty when there
+              isn't one) — otherwise the task text starts wherever the badge
+              happened to end, and a wrapped second line wasn't aligned with
+              the first. Now every task's text starts at the same x position,
+              badge or not, wrapped or not. */}
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+            <span style={{ flexShrink: 0, width: 52 }}>
+              {item.direction && (
+                <span
+                  className="badge badge-warning"
+                  style={{ fontSize: '0.7rem' }}
+                  title={item.direction === 'waiting_on_them' ? 'ממתין לתשובה מהצד השני' : 'דורש פעולה שלי'}
+                >
+                  {item.direction === 'waiting_on_them' ? '📤 מהם' : '📥 אצלי'}
+                </span>
+              )}
             </span>
-          )}
-          {item.task}
+            <span>{item.task}</span>
+          </div>
         </td>
         <td>{item.category ? <span className="badge badge-info">{item.category}</span> : '—'}</td>
         <td>
@@ -324,21 +333,23 @@ export default function TasksPage() {
                 so it's shrunk to (almost) nothing rather than sitting there
                 empty. It can't be display:none, though: showPicker() only
                 works on an element that's actually rendered. */}
-            <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md, 6px)', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', ...(item.deadline ? { border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md, 6px)', overflow: 'hidden' } : {}) }}>
               <input
                 id={`deadline-input-${item.id}`}
                 type="date"
                 dir="ltr"
                 style={item.deadline
                   ? { padding: '4px 6px', fontSize: '0.8rem', width: 130, border: 'none', background: 'transparent' }
-                  : { width: 1, height: 1, padding: 0, border: 'none', opacity: 0, position: 'absolute', pointerEvents: 'none' }}
+                  : { width: 1, height: 1, padding: 0, margin: 0, border: 'none', opacity: 0, position: 'absolute', pointerEvents: 'none' }}
                 value={item.deadline || ''}
                 onChange={e => handleDeadlineChange(item, e.target.value)}
               />
               {!item.completed && !item.saved_for_later && (
                 <select
                   className="form-select"
-                  style={{ padding: '5px 8px', fontSize: '0.78rem', width: 'auto', border: 'none', borderRight: item.deadline ? '1px solid var(--border-color)' : 'none' }}
+                  style={item.deadline
+                    ? { padding: '5px 8px', fontSize: '0.78rem', width: 'auto', border: 'none', borderRight: '1px solid var(--border-color)' }
+                    : { padding: '5px 8px', fontSize: '0.78rem', width: 'auto' }}
                   value=""
                   onChange={(e) => {
                     if (e.target.value === 'custom') {
