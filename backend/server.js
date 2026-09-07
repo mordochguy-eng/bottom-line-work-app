@@ -590,7 +590,7 @@ app.get('/api/sync/log', async (req, res) => {
 app.post('/api/sync/run', async (req, res) => {
   try {
     const result = await sync.runSync();
-    await db.logSyncRun({ status: 'success', ...result });
+    await db.logSyncRun({ status: result.npmInstallError ? 'error' : 'success', error: result.npmInstallError || undefined, ...result });
     res.json({ ok: true, ...result, restarting: true });
     sync.scheduleRestart();
   } catch (error) {

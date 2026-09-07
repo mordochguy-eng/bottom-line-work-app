@@ -61,7 +61,11 @@ export default function SettingsPage() {
     setSyncing(true);
     try {
       const result = await api.runSync();
-      toast(`הסנכרון הצליח (${result.repo}). האפליקציה מתאתחלת מחדש...`, 'success');
+      if (result.npmInstallError) {
+        toast(`הסנכרון הצליח אך התקנת החבילות נכשלה — ייתכן שהאפליקציה לא תעלה. פרטים: ${result.npmInstallError}`, 'error');
+      } else {
+        toast(`הסנכרון הצליח (${result.repo}). האפליקציה מתאתחלת מחדש...`, 'success');
+      }
       setTimeout(load, 1500);
     } catch (err) { toast(err.message, 'error'); } finally { setSyncing(false); }
   }
