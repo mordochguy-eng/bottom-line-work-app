@@ -3,9 +3,11 @@ import fsp from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { exec } from 'child_process';
+import { promisify } from 'util';
 import unzipper from 'unzipper';
 import axios from 'axios';
 
+const execAsync = promisify(exec);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.join(__dirname, '..');
 const TMP_DIR = path.join(__dirname, '.tmp-sync');
@@ -97,7 +99,19 @@ export async function runSync() {
   await copyRecursive(sourceRoot, '', APP_ROOT);
   await fsp.rm(TMP_DIR, { recursive: true, force: true });
 
-  return { repo: config.repo, branch, syncedAt: new Date().toISOString() };
+  // package.json is synced like any other file, but node_modules is excluded
+  // above — so a synced update that adds/removes a dependency needs its own
+  // npm install, or the app restarts against a node_modules that no longer
+  // matches package.json (e.g. an import that can't resolve).
+  let npmInstallError = null;
+  try {
+    await execAsync('npm install', { cwd: path.join(APP_ROOT, 'backend'), timeout: 180000 });
+    await execAsync('npm install', { cwd: path.join(APP_ROOT, 'frontend'), timeout: 180000 });
+  } catch (err) {
+    npmInstallError = err.message;
+  }
+
+  return { repo: config.repo, branch, syncedAt: new Date().toISOString(), npmInstallError };
 }
 
 /**
