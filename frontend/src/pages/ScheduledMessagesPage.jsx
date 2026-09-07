@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api.js';
 import { useToast } from '../components/Toast.jsx';
 import Modal from '../components/Modal.jsx';
+import BulkExcelModal from '../components/BulkExcelModal.jsx';
 import SortTh from '../components/SortTh.jsx';
 import { useSort } from '../hooks/useSort.js';
 
@@ -34,6 +35,7 @@ export default function ScheduledMessagesPage({ prefill, onConsumePrefill } = {}
   const [contacts, setContacts] = useState([]);
   const [statusFilter, setStatusFilter] = useState('all');
   const [modalOpen, setModalOpen] = useState(false);
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [checking, setChecking] = useState(false);
@@ -202,6 +204,7 @@ export default function ScheduledMessagesPage({ prefill, onConsumePrefill } = {}
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button className="btn" onClick={load}>🔄 רענן</button>
+          <button className="btn" onClick={() => setBulkModalOpen(true)}>📊 הודעה מרובה מאקסל</button>
           <button className="btn btn-primary" onClick={() => { resetForm(); setModalOpen(true); }}>+ הודעה חדשה</button>
         </div>
       </div>
@@ -462,6 +465,13 @@ export default function ScheduledMessagesPage({ prefill, onConsumePrefill } = {}
             </div>
           </form>
         </Modal>
+      )}
+
+      {bulkModalOpen && (
+        <BulkExcelModal
+          onClose={() => setBulkModalOpen(false)}
+          onDone={() => { setBulkModalOpen(false); load(); }}
+        />
       )}
     </>
   );
