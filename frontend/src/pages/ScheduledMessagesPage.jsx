@@ -19,7 +19,7 @@ const TYPE_BUTTONS = [
 const TYPE_LABEL = { text: '💬 טקסט', media: '📎 מדיה', location: '📍 מיקום', poll: '📊 סקר', contact: '👤 איש קשר' };
 
 const emptyForm = {
-  query: '', chat_id: '', display_name: '',
+  query: '', recipients: [], // { chat_id, label }[] — supports sending the same message to several people/groups at once
   type: 'text', mediaKind: null,
   content: '', media_url: '', media_filename: '',
   location: { lat: '', lng: '', name: '', address: '' },
@@ -59,7 +59,7 @@ export default function ScheduledMessagesPage({ prefill, onConsumePrefill } = {}
   // recipient again.
   useEffect(() => {
     if (!prefill) return;
-    setForm({ ...emptyForm, query: prefill.display_name || prefill.chat_id, chat_id: prefill.chat_id, display_name: prefill.display_name || '' });
+    setForm({ ...emptyForm, recipients: [{ chat_id: prefill.chat_id, label: prefill.display_name || prefill.chat_id }] });
     setModalOpen(true);
     onConsumePrefill?.();
   }, [prefill]);
@@ -67,28 +67,40 @@ export default function ScheduledMessagesPage({ prefill, onConsumePrefill } = {}
   const suggestions = useMemo(() => {
     const q = form.query.trim().toLowerCase();
     if (!q) return [];
+    const selectedIds = new Set(form.recipients.map(r => r.chat_id));
     const fromContacts = contacts.map(c => ({ label: c.name, chat_id: c.chat_id, tag: 'איש קשר' }));
     const fromChats = chats.map(c => ({ label: c.name, chat_id: c.chat_id, tag: c.chat_id.endsWith('@g.us') ? 'קבוצה' : "צ'אט" }));
     return [...fromContacts, ...fromChats]
+      .filter(s => !selectedIds.has(s.chat_id))
       .filter(s => s.label?.toLowerCase().includes(q) || s.chat_id.includes(q))
       .slice(0, 8);
-  }, [form.query, chats, contacts]);
+  }, [form.query, chats, contacts, form.recipients]);
 
-  function selectSuggestion(s) {
-    setForm(p => ({ ...p, query: s.label, chat_id: s.chat_id, display_name: p.display_name || s.label }));
+  function addRecipient(chat_id, label) {
+    setForm(p => p.recipients.some(r => r.chat_id === chat_id)
+      ? { ...p, query: '' }
+      : { ...p, recipients: [...p.recipients, { chat_id, label }], query: '' });
     setSuggestOpen(false);
     setCheckResult(null);
   }
 
+  function removeRecipient(chat_id) {
+    setForm(p => ({ ...p, recipients: p.recipients.filter(r => r.chat_id !== chat_id) }));
+  }
+
+  function selectSuggestion(s) { addRecipient(s.chat_id, s.label); }
+
   async function handleCheckPhone() {
+    const raw = form.query.trim();
+    if (!raw) return;
     setChecking(true);
     setCheckResult(null);
     try {
-      const res = await api.checkPhone(form.query.trim());
+      const res = await api.checkPhone(raw);
       setCheckResult(res);
       if (res.existsWhatsapp) {
-        setForm(p => ({ ...p, chat_id: res.chatId || p.query.trim() }));
-        toast('המספר קיים בוואטסאפ', 'success');
+        addRecipient(res.chatId || raw, raw);
+        toast('הנמען נוסף', 'success');
       } else {
         toast('המספר לא נמצא בוואטסאפ', 'error');
       }
@@ -109,12 +121,10 @@ export default function ScheduledMessagesPage({ prefill, onConsumePrefill } = {}
 
   async function handleSubmit(e) {
     e.preventDefault();
-    const recipient = form.chat_id || form.query.trim();
-    if (!recipient || (!form.send_now && !form.scheduled_at)) { toast('חסר נמען או מועד שליחה', 'error'); return; }
+    if (form.recipients.length === 0) { toast('לא נבחר אף נמען', 'error'); return; }
+    if (!form.send_now && !form.scheduled_at) { toast('חסר מועד שליחה', 'error'); return; }
 
-    const payload = {
-      chat_id: recipient,
-      display_name: form.display_name || null,
+    const base = {
       type: form.type,
       // "שלח מיד" reuses the exact same scheduling path — scheduling for
       // right now means the existing per-minute dispatcher picks it up
@@ -124,30 +134,33 @@ export default function ScheduledMessagesPage({ prefill, onConsumePrefill } = {}
     };
     if (form.type === 'text') {
       if (!form.content.trim()) { toast('חסר תוכן ההודעה', 'error'); return; }
-      payload.content = form.content;
+      base.content = form.content;
     } else if (form.type === 'media') {
       if (!form.media_url.trim()) { toast('חסר קישור למדיה', 'error'); return; }
-      payload.media_url = form.media_url;
-      payload.media_filename = form.media_filename || null;
-      payload.content = form.content || '';
+      base.media_url = form.media_url;
+      base.media_filename = form.media_filename || null;
+      base.content = form.content || '';
     } else if (form.type === 'location') {
       if (!form.location.lat || !form.location.lng) { toast('חסרות קואורדינטות מיקום', 'error'); return; }
-      payload.location = { ...form.location, lat: Number(form.location.lat), lng: Number(form.location.lng) };
+      base.location = { ...form.location, lat: Number(form.location.lat), lng: Number(form.location.lng) };
     } else if (form.type === 'poll') {
       const options = form.poll_options.map(o => o.trim()).filter(Boolean);
       if (!form.content.trim() || options.length < 2) { toast('סקר דורש שאלה ולפחות שתי אפשרויות', 'error'); return; }
-      payload.content = form.content;
-      payload.poll_options = options;
-      payload.poll_multiple = form.poll_multiple;
+      base.content = form.content;
+      base.poll_options = options;
+      base.poll_multiple = form.poll_multiple;
     } else if (form.type === 'contact') {
       if (!form.contact.phone || !form.contact.firstName) { toast('חסר טלפון או שם פרטי לאיש הקשר', 'error'); return; }
-      payload.contact = form.contact;
+      base.contact = form.contact;
     }
 
     setSubmitting(true);
     try {
-      await api.createScheduledMessage(payload);
-      toast('ההודעה תוזמנה', 'success');
+      // One scheduled-message row per recipient — same content and timing, sent independently.
+      await Promise.all(form.recipients.map(r =>
+        api.createScheduledMessage({ ...base, chat_id: r.chat_id, display_name: r.label || null })
+      ));
+      toast(form.recipients.length > 1 ? `ההודעה תוזמנה ל-${form.recipients.length} נמענים` : 'ההודעה תוזמנה', 'success');
       setModalOpen(false);
       resetForm();
       await load();
@@ -249,20 +262,36 @@ export default function ScheduledMessagesPage({ prefill, onConsumePrefill } = {}
         <Modal title="📨 הודעה מתוזמנת חדשה" onClose={() => setModalOpen(false)}>
           <form onSubmit={handleSubmit}>
             <div className="form-group autocomplete-wrap">
-              <label className="form-label">נמען</label>
+              <label className="form-label">נמענים {form.recipients.length > 1 && `(${form.recipients.length})`}</label>
+              {form.recipients.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                  {form.recipients.map(r => (
+                    <span key={r.chat_id} className="badge badge-info" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 8px' }}>
+                      {r.label || r.chat_id}
+                      <button
+                        type="button"
+                        onClick={() => removeRecipient(r.chat_id)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontWeight: 'bold', padding: 0, lineHeight: 1 }}
+                        aria-label="הסר נמען"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 8 }}>
                 <input
                   className="form-input"
-                  placeholder="חפש לפי שם, כינוי, מספר, או שם קבוצה..."
+                  placeholder="חפש לפי שם, כינוי, מספר, או שם קבוצה... אפשר להוסיף כמה נמענים"
                   value={form.query}
-                  onChange={(e) => { setForm(p => ({ ...p, query: e.target.value, chat_id: '' })); setSuggestOpen(true); setCheckResult(null); }}
+                  onChange={(e) => { setForm(p => ({ ...p, query: e.target.value })); setSuggestOpen(true); setCheckResult(null); }}
                   onFocus={() => setSuggestOpen(true)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCheckPhone(); } }}
                 />
-                {!form.chat_id && (
-                  <button type="button" className="btn btn-sm" onClick={handleCheckPhone} disabled={checking || !form.query.trim()}>
-                    {checking ? '...' : '✓ בדוק'}
-                  </button>
-                )}
+                <button type="button" className="btn btn-sm" onClick={handleCheckPhone} disabled={checking || !form.query.trim()}>
+                  {checking ? '...' : '+ הוסף'}
+                </button>
               </div>
               {suggestOpen && suggestions.length > 0 && (
                 <div className="autocomplete-list">
@@ -274,18 +303,11 @@ export default function ScheduledMessagesPage({ prefill, onConsumePrefill } = {}
                   ))}
                 </div>
               )}
-              {checkResult && (
+              {checkResult && !checkResult.existsWhatsapp && (
                 <div style={{ marginTop: 6 }}>
-                  <span className={`badge ${checkResult.existsWhatsapp ? 'badge-success' : 'badge-danger'}`}>
-                    {checkResult.existsWhatsapp ? 'המספר קיים בוואטסאפ' : 'המספר לא נמצא'}
-                  </span>
+                  <span className="badge badge-danger">המספר לא נמצא בוואטסאפ</span>
                 </div>
               )}
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">שם לתצוגה (אופציונלי)</label>
-              <input className="form-input" value={form.display_name} onChange={(e) => setForm(p => ({ ...p, display_name: e.target.value }))} />
             </div>
 
             <div className="form-group">
