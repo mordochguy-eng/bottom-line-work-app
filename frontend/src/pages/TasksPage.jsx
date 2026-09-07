@@ -190,10 +190,13 @@ export default function TasksPage() {
   // wa.me only knows how to open a chat by phone number — there's no public
   // deep link to jump straight into an existing group, so this is
   // individuals only (returns null for a group chat_id).
+  // web.whatsapp.com/send jumps straight into the chat panel when already
+  // logged into WhatsApp Web (which this is built around) — wa.me instead
+  // shows an interstitial "open the app?" landing page first.
   function whatsappUrl(chatId) {
     if (!chatId?.endsWith('@c.us')) return null;
     const digits = chatId.replace('@c.us', '');
-    return `https://wa.me/${digits}`;
+    return `https://web.whatsapp.com/send?phone=${digits}`;
   }
 
   async function handleCompleteGroup(members) {
