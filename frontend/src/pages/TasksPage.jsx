@@ -292,10 +292,10 @@ export default function TasksPage() {
       <tr key={item.id} className={rowClass}>
         <td style={indented ? { color: 'var(--text-muted)', fontSize: '0.82rem' } : {}}>
           {indented ? '↳' : (
-            <>
-              {contactInfo(item).label}<ContactBadge isSaved={contactInfo(item).isSaved} />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <span>{contactInfo(item).label}<ContactBadge isSaved={contactInfo(item).isSaved} /></span>
               <WhatsAppButton chatId={item.chat_id} />
-            </>
+            </div>
           )}
         </td>
         <td style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{new Date(item.created_at).toLocaleString('he-IL')}</td>
@@ -528,9 +528,13 @@ export default function TasksPage() {
                       <Fragment key={`group-${chatId}`}>
                         <tr className={`contact-group-row ${clusterClass}`} onClick={() => toggleCollapseContact(chatId)}>
                           <td>
-                            <span className={`contact-group-chevron ${isOpen ? 'open' : ''}`}>▶</span>
-                            {info.label}<ContactBadge isSaved={info.isSaved} />
-                            <WhatsAppButton chatId={chatId} onClick={e => e.stopPropagation()} />
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                              <span>
+                                <span className={`contact-group-chevron ${isOpen ? 'open' : ''}`}>▶</span>
+                                {info.label}<ContactBadge isSaved={info.isSaved} />
+                              </span>
+                              <WhatsAppButton chatId={chatId} onClick={e => e.stopPropagation()} />
+                            </div>
                           </td>
                           <td colSpan={5} style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>
                             <span className="badge badge-info" style={{ marginLeft: 8 }}>{members.length} פניות</span>
