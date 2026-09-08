@@ -1,0 +1,8 @@
+name = "bottom-line-scheduler"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+account_id = "d1c78e3179474392f3617c75882ac329"
+
+[[kv_namespaces]]
+binding = "QUEUE"
+id = "d9619ed23abc4eccbdd1e3bda67f5d77"
