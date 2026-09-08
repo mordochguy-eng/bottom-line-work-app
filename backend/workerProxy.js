@@ -33,7 +33,8 @@ export const deleteMessage = (settings, id) => request(settings, 'delete', `mess
 export const pushConfig = (settings) => request(settings, 'post', 'config', {
   apiUrl: settings.apiUrl,
   idInstance: settings.idInstance,
-  apiTokenInstance: settings.apiTokenInstance
+  apiTokenInstance: settings.apiTokenInstance,
+  recipientChatId: settings.recipientChatId || null
 });
 
 export const getWorkerStatus = (settings) => request(settings, 'get', 'config');

@@ -164,6 +164,19 @@ async function migrateLegacyMessages(env) {
   await env.QUEUE.delete(LEGACY_MESSAGES_KEY);
 }
 
+// ---------- התראת כשל ----------
+
+async function notifyFailure(config, msg) {
+  if (!config.recipientChatId) return;
+  const when = new Date(msg.scheduled_at).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' });
+  const who = msg.display_name || msg.chat_id;
+  const preview = (msg.content || '').slice(0, 60);
+  const text = `⚠️ הודעה מתוזמנת נכשלה\nנמען: ${who}\nמתוזמן ל: ${when}${preview ? `\nתוכן: ${preview}` : ''}`;
+  try {
+    await greenApiPost(config, 'sendMessage', { chatId: config.recipientChatId, message: text });
+  } catch { /* שגיאה בהתראה עצמה — לא קריטי */ }
+}
+
 // ---------- הרצת התור (מופעל ע"י Cron Trigger כל דקה) ----------
 
 async function runDispatch(env) {
@@ -183,6 +196,7 @@ async function runDispatch(env) {
       msg.status = 'failed';
       msg.attempts = (msg.attempts || 0) + 1;
       await putMessage(env, msg);
+      await notifyFailure(config, msg);
       continue;
     }
 
@@ -202,6 +216,7 @@ async function runDispatch(env) {
       msg.attempts = attempts;
       msg.status = (isExpired(msg, now) || attempts >= msg.max_attempts) ? 'failed' : 'pending';
       msg.retry_after = getNextRetryAt({ ...msg, attempts }, now);
+      if (msg.status === 'failed') await notifyFailure(config, msg);
     }
     await putMessage(env, msg);
   }
@@ -236,7 +251,8 @@ async function handleRequest(request, env) {
       if (request.method === 'POST') {
         const body = await request.json();
         await env.QUEUE.put(CONFIG_KEY, JSON.stringify({
-          apiUrl: body.apiUrl, idInstance: body.idInstance, apiTokenInstance: body.apiTokenInstance
+          apiUrl: body.apiUrl, idInstance: body.idInstance, apiTokenInstance: body.apiTokenInstance,
+          recipientChatId: body.recipientChatId || null
         }));
         return json({ ok: true });
       }
