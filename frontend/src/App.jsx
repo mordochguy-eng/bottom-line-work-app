@@ -14,13 +14,13 @@ const NAV_ITEMS = [
   { key: 'groups', label: 'קבוצות מעקב', icon: '💬' },
   { key: 'tasks', label: 'משימות', icon: '✅' },
   { key: 'queue', label: 'תור אישור תגובות', icon: '📥' },
-  { key: 'scheduled', label: 'הודעות מתוזמנות', icon: '📨' },
+  { key: 'scheduled', label: 'הודעות מתוזמנות', icon: '🕐' },
   { key: 'activity', label: 'יומן פעולות', icon: '🕘' },
   { key: 'settings', label: 'הגדרות', icon: '⚙️' }
 ];
 
 function AppInner() {
-  const [activeTab, setActiveTab] = useState('tasks');
+  const [activeTab, setActiveTab] = useState('home');
   const [pendingCount, setPendingCount] = useState(0);
   // A group's "✉️ הודעה" shortcut sets this and jumps to the scheduled-
   // messages tab, which opens straight into a pre-filled compose modal.
