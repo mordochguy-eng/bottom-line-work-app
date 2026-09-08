@@ -16,7 +16,8 @@
  * כל בקשת HTTP חייבת לשאת: Authorization: Bearer <AUTH_TOKEN>
  */
 
-const MESSAGES_KEY = 'messages';
+const MESSAGE_PREFIX = 'msg:';
+const LEGACY_MESSAGES_KEY = 'messages'; // הפורמט הישן — מערך אחד עם כל ההודעות
 const CONFIG_KEY = 'config';
 const RETRY_BASE_DELAY_MS = 5 * 60 * 1000; // 5 דקות
 const MISSED_MESSAGE_WINDOW_HOURS = 1;
@@ -108,41 +109,80 @@ async function dispatchMessage(config, msg) {
 }
 
 // ---------- אחסון (KV) ----------
+//
+// כל הודעה נשמרת תחת מפתח KV נפרד (msg:<id>) במקום מערך אחד גדול תחת
+// מפתח יחיד. הסיבה: Workers KV הוא "eventually consistent" — put() לא
+// בהכרח נראה מיידית ב-get() הבא, גם מאותו Worker, אפילו כמה שניות אחרי.
+// עם מפתח יחיד לכל ההודעות, יצירת הודעה חדשה דרשה לקרוא את הרשימה
+// המלאה, להוסיף, ולכתוב הכל בחזרה — ואם כמה בקשות יצירה קרו קרוב בזמן
+// (למשל תזמון הודעה לכמה נמענים), כל אחת עלולה לקרוא מצב "ישן" שעדיין
+// לא כלל את הכתיבה הקודמת, ולדרוס אותה. עם מפתח נפרד לכל הודעה, יצירה
+// היא כתיבה עצמאית למפתח חדש — אין בכלל קריאה-לפני-כתיבה, ולכן אין מרוץ.
 
-async function getMessages(env) {
-  const raw = await env.QUEUE.get(MESSAGES_KEY);
-  return raw ? JSON.parse(raw) : [];
+function messageKey(id) { return `${MESSAGE_PREFIX}${id}`; }
+
+async function listMessages(env) {
+  const messages = [];
+  let cursor;
+  do {
+    const page = await env.QUEUE.list({ prefix: MESSAGE_PREFIX, cursor });
+    const values = await Promise.all(page.keys.map(k => env.QUEUE.get(k.name)));
+    for (const raw of values) if (raw) messages.push(JSON.parse(raw));
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor);
+  return messages;
 }
-async function saveMessages(env, messages) {
-  await env.QUEUE.put(MESSAGES_KEY, JSON.stringify(messages));
+async function getMessage(env, id) {
+  const raw = await env.QUEUE.get(messageKey(id));
+  return raw ? JSON.parse(raw) : null;
+}
+async function putMessage(env, msg) {
+  await env.QUEUE.put(messageKey(msg.id), JSON.stringify(msg));
+}
+async function deleteMessageKey(env, id) {
+  await env.QUEUE.delete(messageKey(id));
 }
 async function getConfig(env) {
   const raw = await env.QUEUE.get(CONFIG_KEY);
   return raw ? JSON.parse(raw) : null;
 }
-function nextId(rows) {
-  return rows.length > 0 ? Math.max(...rows.map(r => r.id)) + 1 : 1;
+function newId() {
+  // אין יותר "אורך המערך + 1" — כי זה בדיוק מה שדרש לקרוא את הרשימה
+  // המלאה לפני כל יצירה. מזהה ייחודי בלי לקרוא מצב קודם בכלל.
+  return Date.now() * 1000 + Math.floor(Math.random() * 1000);
+}
+
+// הודעות שכבר נוצרו לפני העדכון הזה יושבות עדיין תחת המפתח הישן
+// (מערך יחיד). מריצים את זה בתחילת כל בקשה/הרצת cron — בפעם הראשונה
+// זה מעביר כל הודעה למפתח הנפרד שלה ומוחק את המפתח הישן; בפעמים הבאות
+// המפתח הישן כבר לא קיים אז זו רק בדיקת get() זריזה שמוחזרת ריקה.
+async function migrateLegacyMessages(env) {
+  const raw = await env.QUEUE.get(LEGACY_MESSAGES_KEY);
+  if (!raw) return;
+  const legacy = JSON.parse(raw);
+  for (const msg of legacy) await putMessage(env, msg);
+  await env.QUEUE.delete(LEGACY_MESSAGES_KEY);
 }
 
 // ---------- הרצת התור (מופעל ע"י Cron Trigger כל דקה) ----------
 
 async function runDispatch(env) {
+  await migrateLegacyMessages(env);
   const config = await getConfig(env);
   if (!config?.apiUrl) return; // עדיין לא הוגדרו פרטי Green API
 
-  const messages = await getMessages(env);
+  const messages = await listMessages(env);
   const now = new Date();
-  let changed = false;
 
   for (const msg of messages) {
     if (!isDue(msg, now)) continue;
-    changed = true;
 
     // נבדק *לפני* ניסיון שליחה — הודעה שהתיישנה יותר משעה מסומנת "נכשל"
     // במקום להישלח באיחור.
     if (isExpired(msg, now)) {
       msg.status = 'failed';
       msg.attempts = (msg.attempts || 0) + 1;
+      await putMessage(env, msg);
       continue;
     }
 
@@ -163,9 +203,8 @@ async function runDispatch(env) {
       msg.status = (isExpired(msg, now) || attempts >= msg.max_attempts) ? 'failed' : 'pending';
       msg.retry_after = getNextRetryAt({ ...msg, attempts }, now);
     }
+    await putMessage(env, msg);
   }
-
-  if (changed) await saveMessages(env, messages);
 }
 
 // ---------- שרת HTTP (CRUD זהה ל-API המקומי) ----------
@@ -182,6 +221,8 @@ function isAuthorized(request, env) {
 async function handleRequest(request, env) {
   if (!env.AUTH_TOKEN) return json({ error: 'AUTH_TOKEN לא הוגדר ב-Worker' }, 500);
   if (!isAuthorized(request, env)) return json({ error: 'לא מורשה' }, 401);
+
+  await migrateLegacyMessages(env);
 
   const url = new URL(request.url);
   const parts = url.pathname.split('/').filter(Boolean); // e.g. ['messages'] or ['messages','12']
@@ -202,16 +243,14 @@ async function handleRequest(request, env) {
     }
 
     if (parts[0] === 'messages') {
-      const messages = await getMessages(env);
-
       if (parts.length === 1 && request.method === 'GET') {
-        return json(messages);
+        return json(await listMessages(env));
       }
 
       if (parts.length === 1 && request.method === 'POST') {
         const body = await request.json();
         const entry = {
-          id: nextId(messages),
+          id: newId(),
           chat_id: normaliseChatId(body.chat_id),
           display_name: body.display_name || null,
           type: body.type || 'text',
@@ -230,24 +269,23 @@ async function handleRequest(request, env) {
           retry_after: null,
           created_at: new Date().toISOString()
         };
-        messages.push(entry);
-        await saveMessages(env, messages);
+        await putMessage(env, entry);
         return json(entry);
       }
 
       if (parts.length === 2 && request.method === 'PUT') {
         const id = Number(parts[1]);
-        const idx = messages.findIndex(m => m.id === id);
-        if (idx === -1) return json({ error: 'ההודעה לא נמצאה' }, 404);
+        const existing = await getMessage(env, id);
+        if (!existing) return json({ error: 'ההודעה לא נמצאה' }, 404);
         const patch = await request.json();
-        messages[idx] = { ...messages[idx], ...patch };
-        await saveMessages(env, messages);
-        return json(messages[idx]);
+        const updated = { ...existing, ...patch };
+        await putMessage(env, updated);
+        return json(updated);
       }
 
       if (parts.length === 2 && request.method === 'DELETE') {
         const id = Number(parts[1]);
-        await saveMessages(env, messages.filter(m => m.id !== id));
+        await deleteMessageKey(env, id);
         return json({ ok: true });
       }
     }
