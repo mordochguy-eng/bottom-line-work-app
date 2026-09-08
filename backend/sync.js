@@ -107,6 +107,7 @@ export async function runSync() {
   try {
     await execAsync('npm install', { cwd: path.join(APP_ROOT, 'backend'), timeout: 180000 });
     await execAsync('npm install', { cwd: path.join(APP_ROOT, 'frontend'), timeout: 180000 });
+    await execAsync('npm run build', { cwd: path.join(APP_ROOT, 'frontend'), timeout: 300000 });
   } catch (err) {
     npmInstallError = err.message;
   }
