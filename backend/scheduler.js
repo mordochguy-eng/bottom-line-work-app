@@ -1,4 +1,4 @@
-// Pure scheduling logic — no I/O, fully testable
+﻿// Pure scheduling logic — no I/O, fully testable
 
 export const RETRY_BASE_DELAY_MS = 5 * 60 * 1000; // 5 minutes
 export const MISSED_MESSAGE_WINDOW_HOURS = 1;
@@ -52,9 +52,11 @@ export function getNextRepeatAt(msg) {
 export function normaliseChatId(input) {
   if (!input) return null;
   const stripped = input.trim().replace(/[\s\-()]/g, '');
-  if (stripped.endsWith('@c.us') || stripped.endsWith('@g.us')) return stripped;
-  let digits = stripped.replace(/^\+/, '');
+  if (stripped.endsWith('@g.us')) return stripped;
+  let digits = stripped.endsWith('@c.us') ? stripped.slice(0, -5) : stripped.replace(/^\+/, '');
+  digits = digits.replace(/^\+/, '');
   if (digits.startsWith('0')) digits = '972' + digits.slice(1);
+  else if (/^5\d{8}$/.test(digits)) digits = '972' + digits;
   return `${digits}@c.us`;
 }
 

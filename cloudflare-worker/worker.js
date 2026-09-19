@@ -57,9 +57,11 @@ function getNextRepeatAt(msg) {
 function normaliseChatId(input) {
   if (!input) return null;
   const stripped = String(input).trim().replace(/[\s\-()]/g, '');
-  if (stripped.endsWith('@c.us') || stripped.endsWith('@g.us')) return stripped;
-  let digits = stripped.replace(/^\+/, '');
+  if (stripped.endsWith('@g.us')) return stripped;
+  let digits = stripped.endsWith('@c.us') ? stripped.slice(0, -5) : stripped.replace(/^\+/, '');
+  digits = digits.replace(/^\+/, '');
   if (digits.startsWith('0')) digits = '972' + digits.slice(1);
+  else if (/^5\d{8}$/.test(digits)) digits = '972' + digits;
   return `${digits}@c.us`;
 }
 
