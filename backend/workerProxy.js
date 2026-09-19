@@ -38,3 +38,14 @@ export const pushConfig = (settings) => request(settings, 'post', 'config', {
 });
 
 export const getWorkerStatus = (settings) => request(settings, 'get', 'config');
+
+export const uploadMedia = async (settings, body) => {
+  const res = await axios({
+    method: 'post',
+    url: `${baseUrl(settings)}/upload`,
+    headers: { Authorization: `Bearer ${settings.workerAuthToken}` },
+    data: body,
+    timeout: 60000
+  });
+  return res.data;
+};

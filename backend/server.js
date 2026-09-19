@@ -419,6 +419,17 @@ app.get('/api/worker/status', async (req, res) => {
   }
 });
 
+app.post('/api/upload-media', express.raw({ type: '*/*', limit: '20mb' }), async (req, res) => {
+  try {
+    const settings = await db.getSettings();
+    if (!workerProxy.isWorkerConfigured(settings)) return res.status(400).json({ error: 'Worker לא מוגדר — העלאת קבצים דורשת Worker מוגדר' });
+    const contentType = req.get('Content-Type') || 'application/octet-stream';
+    const filename = req.get('X-Filename') || 'file';
+    const base64 = Buffer.from(req.body).toString('base64');
+    res.json(await workerProxy.uploadMedia(settings, { data: base64, contentType, filename }));
+  } catch (error) { handleError(res, error); }
+});
+
 app.post('/api/check-phone', async (req, res) => {
   try {
     const settings = await db.getSettings();

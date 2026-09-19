@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
 import Modal from './Modal.jsx';
 import { api } from '../api.js';
@@ -48,12 +48,26 @@ export default function BulkExcelModal({ onClose, onDone }) {
   const [startMode, setStartMode] = useState('now');
   const [startAt, setStartAt] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
   const [progress, setProgress] = useState(0);
   const toast = useToast();
 
   function selectType(btn) {
     setType(btn.key);
     setMediaKind(btn.mediaKind);
+  }
+
+  async function handleMediaFileUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploadingMedia(true);
+    try {
+      const result = await api.uploadMedia(file);
+      setMediaUrl(result.url);
+      setMediaFilename(file.name);
+      toast('הקובץ הועלה בהצלחה', 'success');
+    } catch (err) { toast('שגיאה בהעלאת קובץ: ' + err.message, 'error'); }
+    finally { setUploadingMedia(false); e.target.value = ''; }
   }
 
   async function handleFile(e) {
@@ -208,12 +222,23 @@ export default function BulkExcelModal({ onClose, onDone }) {
           {type === 'media' && (
             <>
               <div className="form-group">
-                <label className="form-label">קישור לקובץ מדיה (URL)</label>
-                <input className="form-input" value={mediaUrl} onChange={e => setMediaUrl(e.target.value)} placeholder="https://..." />
-              </div>
-              <div className="form-group">
-                <label className="form-label">שם הקובץ (אופציונלי)</label>
-                <input className="form-input" value={mediaFilename} onChange={e => setMediaFilename(e.target.value)} placeholder="image.jpg" />
+                <label className="form-label">קובץ מדיה</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <label htmlFor="bulk-media-upload" className="btn btn-secondary" style={{ cursor: 'pointer', margin: 0 }}>
+                    {uploadingMedia ? '⏳ מעלה...' : '📎 בחר קובץ'}
+                  </label>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                    {mediaFilename || 'לא נבחר קובץ'}
+                  </span>
+                </div>
+                <input
+                  id="bulk-media-upload"
+                  type="file"
+                  style={{ display: 'none' }}
+                  disabled={uploadingMedia}
+                  onChange={handleMediaFileUpload}
+                />
+                <input className="form-input" value={mediaUrl} onChange={e => setMediaUrl(e.target.value)} placeholder="או הזן URL ישיר (https://...)" style={{ fontSize: '0.82rem' }} />
               </div>
               <div className="form-group">
                 <label className="form-label">כיתוב (אופציונלי — תומך בשדות {'{שם}'})</label>

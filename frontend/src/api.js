@@ -41,6 +41,11 @@ export const api = {
 
   getWorkerStatus: () => request('/worker/status'),
   syncWorkerConfig: () => request('/worker/sync-config', { method: 'POST' }),
+  uploadMedia: (file) => fetch('/api/upload-media', {
+    method: 'POST',
+    headers: { 'Content-Type': file.type || 'application/octet-stream', 'X-Filename': file.name },
+    body: file
+  }).then(async r => { const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.error || 'שגיאה בהעלאה'); return d; }),
 
   getContacts: () => request('/contacts'),
   createContact: (contact) => request('/contacts', { method: 'POST', body: JSON.stringify(contact) }),

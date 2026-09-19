@@ -234,13 +234,24 @@ function isAuthorized(request, env) {
 }
 
 async function handleRequest(request, env) {
+  const url = new URL(request.url);
+  const parts = url.pathname.split('/').filter(Boolean);
+
+  // Public file serving — no auth (Green API needs direct download access)
+  if (parts[0] === 'files' && parts.length === 2 && request.method === 'GET') {
+    const raw = await env.QUEUE.get(`file:${parts[1]}`);
+    if (!raw) return new Response('Not found', { status: 404 });
+    const { data, contentType } = JSON.parse(raw);
+    const bytes = Uint8Array.from(atob(data), c => c.charCodeAt(0));
+    return new Response(bytes, {
+      headers: { 'Content-Type': contentType, 'Cache-Control': 'public, max-age=86400' }
+    });
+  }
+
   if (!env.AUTH_TOKEN) return json({ error: 'AUTH_TOKEN לא הוגדר ב-Worker' }, 500);
   if (!isAuthorized(request, env)) return json({ error: 'לא מורשה' }, 401);
 
   await migrateLegacyMessages(env);
-
-  const url = new URL(request.url);
-  const parts = url.pathname.split('/').filter(Boolean); // e.g. ['messages'] or ['messages','12']
 
   try {
     if (parts[0] === 'config') {
@@ -310,6 +321,17 @@ async function handleRequest(request, env) {
       // הפעלה ידנית מיידית — שימושי לבדיקה, בלי לחכות לטריגר הבא
       await runDispatch(env);
       return json({ ok: true });
+    }
+
+    if (parts[0] === 'upload' && request.method === 'POST') {
+      const body = await request.json();
+      const id = newId();
+      await env.QUEUE.put(`file:${id}`, JSON.stringify({
+        data: body.data,
+        contentType: body.contentType || 'application/octet-stream',
+        filename: body.filename || 'file'
+      }));
+      return json({ ok: true, url: `${url.origin}/files/${id}`, id });
     }
 
     return json({ error: 'נתיב לא נמצא' }, 404);

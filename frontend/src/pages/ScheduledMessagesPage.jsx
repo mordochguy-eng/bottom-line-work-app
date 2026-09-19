@@ -42,6 +42,7 @@ export default function ScheduledMessagesPage({ prefill, onConsumePrefill } = {}
   const [checkResult, setCheckResult] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
   const toast = useToast();
 
   async function load() {
@@ -120,6 +121,18 @@ export default function ScheduledMessagesPage({ prefill, onConsumePrefill } = {}
   function removePollOption(i) { setForm(p => ({ ...p, poll_options: p.poll_options.filter((_, idx) => idx !== i) })); }
 
   function resetForm() { setForm(emptyForm); setCheckResult(null); }
+
+  async function handleMediaFileUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploadingMedia(true);
+    try {
+      const result = await api.uploadMedia(file);
+      setForm(p => ({ ...p, media_url: result.url, media_filename: file.name }));
+      toast('הקובץ הועלה בהצלחה', 'success');
+    } catch (err) { toast('שגיאה בהעלאת קובץ: ' + err.message, 'error'); }
+    finally { setUploadingMedia(false); e.target.value = ''; }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -343,13 +356,25 @@ export default function ScheduledMessagesPage({ prefill, onConsumePrefill } = {}
               <>
                 <div className="form-group">
                   <label className="form-label">
-                    קישור ל{form.mediaKind === 'image' ? 'תמונה' : form.mediaKind === 'video' ? 'וידאו' : form.mediaKind === 'audio' ? 'קובץ שמע' : 'קובץ'} (URL)
+                    {form.mediaKind === 'image' ? 'תמונה' : form.mediaKind === 'video' ? 'וידאו' : form.mediaKind === 'audio' ? 'שמע' : 'קובץ מדיה'}
                   </label>
-                  <input className="form-input" value={form.media_url} onChange={(e) => setForm(p => ({ ...p, media_url: e.target.value }))} placeholder="https://..." />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">שם קובץ (אופציונלי)</label>
-                  <input className="form-input" value={form.media_filename} onChange={(e) => setForm(p => ({ ...p, media_filename: e.target.value }))} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <label htmlFor="media-file-upload" className="btn btn-secondary" style={{ cursor: 'pointer', margin: 0 }}>
+                      {uploadingMedia ? '⏳ מעלה...' : '📎 בחר קובץ'}
+                    </label>
+                    <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                      {form.media_filename || 'לא נבחר קובץ'}
+                    </span>
+                  </div>
+                  <input
+                    id="media-file-upload"
+                    type="file"
+                    style={{ display: 'none' }}
+                    disabled={uploadingMedia}
+                    onChange={handleMediaFileUpload}
+                    accept={form.mediaKind === 'image' ? 'image/*' : form.mediaKind === 'video' ? 'video/*' : form.mediaKind === 'audio' ? 'audio/*' : '*/*'}
+                  />
+                  <input className="form-input" value={form.media_url} onChange={(e) => setForm(p => ({ ...p, media_url: e.target.value }))} placeholder="או הזן URL ישיר (https://...)" style={{ fontSize: '0.82rem' }} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">כיתוב (אופציונלי)</label>
