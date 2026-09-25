@@ -126,11 +126,11 @@ export default function TasksPage() {
   }
 
   async function handleMarkAllComplete() {
-    const active = items.filter(i => !i.completed && !i.saved_for_later);
-    if (!active.length) return;
+    const count = items.filter(i => !i.completed && !i.saved_for_later).length;
+    if (!count) return;
     try {
-      await Promise.all(active.map(i => api.toggleActionItem(i.id, true)));
-      toast(`${active.length} משימות סומנו כהושלם`, 'success');
+      await api.completeAllActionItems();
+      toast(`${count} משימות סומנו כהושלם`, 'success');
       await load();
     } catch (err) { toast(err.message, 'error'); }
   }

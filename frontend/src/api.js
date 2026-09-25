@@ -30,6 +30,7 @@ export const api = {
   askAboutChat: (chat_id, question, chatHistory) => request('/ai/ask-about-chat', { method: 'POST', body: JSON.stringify({ chat_id, question, chatHistory }) }),
 
   getActionItems: () => request('/action-items'),
+  completeAllActionItems: () => request('/action-items/complete-all', { method: 'POST' }),
   toggleActionItem: (id, completed) => request(`/action-items/${id}/toggle`, { method: 'POST', body: JSON.stringify({ completed }) }),
   toggleActionItemSaved: (id, saved_for_later, snooze_days) => request(`/action-items/${id}/toggle-save`, { method: 'POST', body: JSON.stringify({ saved_for_later, snooze_days }) }),
   setActionItemDeadline: (id, deadline) => request(`/action-items/${id}/deadline`, { method: 'POST', body: JSON.stringify({ deadline }) }),

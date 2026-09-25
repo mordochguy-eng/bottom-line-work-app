@@ -318,6 +318,10 @@ app.post('/api/action-items/:id/toggle', async (req, res) => {
   try { res.json(await db.setActionItemCompleted(Number(req.params.id), req.body.completed)); } catch (error) { handleError(res, error); }
 });
 
+app.post('/api/action-items/complete-all', async (req, res) => {
+  try { res.json(await db.bulkCompleteActionItems()); } catch (error) { handleError(res, error); }
+});
+
 app.post('/api/action-items/:id/deadline', async (req, res) => {
   try { res.json(await db.setActionItemDeadline(Number(req.params.id), req.body.deadline)); } catch (error) { handleError(res, error); }
 });

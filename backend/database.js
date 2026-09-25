@@ -294,6 +294,14 @@ export async function getActionItems() {
 export async function setActionItems(items) {
   await writeJson('action_items.json', items);
 }
+export async function bulkCompleteActionItems() {
+  const items = await getActionItems();
+  const updated = items.map(i =>
+    (!i.completed && !i.saved_for_later) ? { ...i, completed: true } : i
+  );
+  await writeJson('action_items.json', updated);
+  return updated;
+}
 // Toggle completed, logging the change for undo (only when the value changes).
 export async function setActionItemCompleted(id, completed) {
   const items = await getActionItems();
