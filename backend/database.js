@@ -32,7 +32,14 @@ async function writeJson(filename, data) {
     const finalPath = path.join(DATA_DIR, filename);
     const tmpPath = `${finalPath}.tmp`;
     await fs.writeFile(tmpPath, JSON.stringify(data, null, 2), 'utf8');
-    await fs.rename(tmpPath, finalPath);
+    try {
+      await fs.rename(tmpPath, finalPath);
+    } catch (e) {
+      if (e.code === 'EPERM') {
+        await fs.unlink(finalPath).catch(() => {});
+        await fs.rename(tmpPath, finalPath);
+      } else throw e;
+    }
   });
   writeQueues.set(filename, next);
   return next;
