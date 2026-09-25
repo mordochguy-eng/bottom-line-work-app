@@ -125,6 +125,16 @@ export default function TasksPage() {
     } catch (err) { toast(err.message, 'error'); }
   }
 
+  async function handleMarkAllComplete() {
+    const active = items.filter(i => !i.completed && !i.saved_for_later);
+    if (!active.length) return;
+    try {
+      await Promise.all(active.map(i => api.toggleActionItem(i.id, true)));
+      toast(`${active.length} משימות סומנו כהושלם`, 'success');
+      await load();
+    } catch (err) { toast(err.message, 'error'); }
+  }
+
   async function handleSnooze(item, days) {
     try {
       await api.toggleActionItemSaved(item.id, true, days);
@@ -497,6 +507,14 @@ export default function TasksPage() {
             {label}
           </button>
         ))}
+        {filter === 'active' && items.filter(i => !i.completed && !i.saved_for_later).length > 0 && (
+          <>
+            <span style={{ width: 1, height: 20, background: 'var(--border-color)', margin: '0 4px' }} />
+            <button className="btn btn-sm btn-danger" onClick={handleMarkAllComplete}>
+              ✅ סמן הכל כהושלם
+            </button>
+          </>
+        )}
         <span style={{ width: 1, height: 20, background: 'var(--border-color)', margin: '0 4px' }} />
         {[['all', 'הכל'], ['my_action', '📥 לטיפולי'], ['waiting_on_them', '📤 ממתין מהם']].map(([key, label]) => (
           <button key={key} className="btn btn-sm" style={directionFilter === key ? { background: 'var(--accent-warning-glow, rgba(180,83,9,0.1))', color: 'var(--accent-warning)', borderColor: 'rgba(180,83,9,0.25)' } : {}} onClick={() => setDirectionFilter(key)}>
