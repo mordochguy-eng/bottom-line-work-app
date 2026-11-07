@@ -1,15 +1,14 @@
 // WhatsApp client built on Baileys (@whiskeysockets/baileys): talks to WhatsApp
 // directly from this Node process. No Docker, no browser, no third-party cloud.
-// It exposes the SAME function names as greenApi.js (minus the credential
-// arguments) so whatsapp.js can switch between the two providers.
+// It is the app's only WhatsApp connection (Green API was removed).
 //
-// Important differences from Green API:
+// Things to know:
 //  - The WhatsApp connection lives inside this process. If the computer is off
 //    nothing can be sent; WhatsApp redelivers recent missed messages on reconnect.
 //  - There is no "get chat history" call. Messages are collected as they arrive
 //    (plus the history WhatsApp pushes once at pairing) into data/wa-store.json.
 //
-// Chat ids keep the Green API style used everywhere else in the app:
+// Chat ids keep the format used everywhere else in the app:
 //   individuals: <phone>@c.us    groups: <id>@g.us    (LID chats keep their @lid id)
 import fs from 'fs';
 import path from 'path';
@@ -31,7 +30,8 @@ let B = null;          // baileys module (loaded lazily so the app still boots i
 let QR = null;         // qrcode module (optional)
 let pinoLib = null;
 
-const state = { status: 'idle', qr: null, qrDataUrl: null, user: null, lastError: null, updatedAt: Date.now() };
+const state = { status: 'idle', qr: null, qrDataUrl: null, user: null, lastError: null, updatedAt: Date.now(),
+  lastIncomingAt: 0, lastSend: null, lastRead: null };
 let sock = null;
 let starting = false;
 let stopped = false;
@@ -276,6 +276,7 @@ export async function start() {
         const st = toStored(wam);
         if (!st) continue;
         const isNew = addMessage(st);
+        if (isNew && !st.fromMe && type === 'notify') state.lastIncomingAt = Date.now();
         if (!isNew || st.fromMe || !st.text) continue;
         if (type !== 'notify' && type !== 'append') continue;
         if (Math.floor(Date.now() / 1000) - st.ts > QUEUE_MAX_AGE_SEC) continue;
@@ -312,6 +313,9 @@ export function getStatus() {
     hasQr: state.status === 'qr',
     error: state.lastError,
     store: { chats: messages.size, contacts: contacts.size },
+    lastIncomingAt: state.lastIncomingAt || null,
+    lastSend: state.lastSend,
+    lastRead: state.lastRead,
     updatedAt: state.updatedAt,
   };
 }
@@ -351,16 +355,13 @@ async function ensureReady(timeoutMs = 20000) {
   throw new Error('וואטסאפ לא מחובר כרגע (Baileys). נסה שוב בעוד רגע.');
 }
 
-// ---------- Green-API-compatible surface ----------
+// ---------- public surface ----------
 export async function checkInstanceStatus() {
   if (!sock && !starting && state.status === 'idle') { try { await start(); } catch {} }
   const map = { open: 'authorized', qr: 'notAuthorized', loggedOut: 'notAuthorized', starting: 'starting', reconnecting: 'starting', replaced: 'blocked', error: 'blocked', idle: 'starting' };
   return { stateInstance: map[state.status] || 'starting', raw: getStatus() };
 }
 
-export async function ensureIncomingWebhookEnabled() { return false; }
-export async function getInstanceSettings() { return {}; }
-export async function updateInstanceSettings() { return {}; }
 
 async function loadGroups(force = false) {
   if (!force && groupsCache.data && Date.now() - groupsCache.at < 5 * 60 * 1000) return groupsCache.data;
@@ -371,7 +372,7 @@ async function loadGroups(force = false) {
   return list;
 }
 
-export async function fetchChats() {
+async function _fetchChats() {
   const groups = await loadGroups(true);
   return groups.map(g => ({ chat_id: g.id, name: g.name || g.id, type: 'general' }));
 }
@@ -412,7 +413,7 @@ export async function fetchChatHistory(chatId, count = 100) {
   }));
 }
 
-export async function downloadMediaAsBase64(url) {
+async function _downloadMediaAsBase64(url) {
   const m = /^baileys-media:\/\/([^/]+)\/(.+)$/.exec(url || '');
   if (!m) throw new Error('כתובת מדיה לא תקינה');
   const chatId = decodeURIComponent(m[1]);
@@ -428,7 +429,7 @@ export async function downloadMediaAsBase64(url) {
   return Buffer.from(buf).toString('base64');
 }
 
-export async function sendWhatsAppMessage(chatId, message) {
+async function _sendWhatsAppMessage(chatId, message) {
   const s = await ensureReady();
   const res = await s.sendMessage(toJid(chatId), { text: message });
   return { idMessage: res && res.key && res.key.id };
@@ -453,7 +454,7 @@ async function mediaSource(url) {
   return Buffer.from(res.data);
 }
 
-export async function sendFile(chatId, { url, filename, caption = '' }) {
+async function _sendFile(chatId, { url, filename, caption = '' }) {
   const s = await ensureReady();
   const buffer = await mediaSource(url);
   const fname = filename || path.basename(url || 'file');
@@ -468,13 +469,13 @@ export async function sendFile(chatId, { url, filename, caption = '' }) {
   return { idMessage: res && res.key && res.key.id };
 }
 
-export async function sendLocation(chatId, { lat, lng, name = '', address = '' }) {
+async function _sendLocation(chatId, { lat, lng, name = '', address = '' }) {
   const s = await ensureReady();
   const res = await s.sendMessage(toJid(chatId), { location: { degreesLatitude: Number(lat), degreesLongitude: Number(lng), name, address } });
   return { idMessage: res && res.key && res.key.id };
 }
 
-export async function sendContact(chatId, { phone, firstName, lastName = '' }) {
+async function _sendContact(chatId, { phone, firstName, lastName = '' }) {
   const s = await ensureReady();
   const digits = String(phone || '').replace(/\D/g, '');
   const full = `${firstName || ''} ${lastName || ''}`.trim();
@@ -483,7 +484,7 @@ export async function sendContact(chatId, { phone, firstName, lastName = '' }) {
   return { idMessage: res && res.key && res.key.id };
 }
 
-export async function sendPoll(chatId, { question, options, multipleAnswers = false }) {
+async function _sendPoll(chatId, { question, options, multipleAnswers = false }) {
   const s = await ensureReady();
   const values = (options || []).filter(Boolean);
   const res = await s.sendMessage(toJid(chatId), { poll: { name: question, values, selectableCount: multipleAnswers ? values.length : 1 } });
@@ -517,6 +518,22 @@ export async function getIndividualContacts() {
   return out;
 }
 
-// ---------- incoming notifications (replaces Green API's polled queue) ----------
+// ---------- incoming notifications (in-memory queue read by messageListener) ----------
 export async function receiveNotification() { return queue.shift() || null; }
-export async function deleteNotification() { /* nothing to acknowledge: shift() already removed it */ }
+
+// ---------- health tracking (feeds the in-app status banner) ----------
+const trackSend = (fn) => async (...args) => {
+  try { const r = await fn(...args); state.lastSend = { ok: true, at: Date.now() }; return r; }
+  catch (e) { state.lastSend = { ok: false, at: Date.now(), error: e.message }; throw e; }
+};
+const trackRead = (fn) => async (...args) => {
+  try { const r = await fn(...args); state.lastRead = { ok: true, at: Date.now() }; return r; }
+  catch (e) { state.lastRead = { ok: false, at: Date.now(), error: e.message }; throw e; }
+};
+export const sendWhatsAppMessage = trackSend(_sendWhatsAppMessage);
+export const sendFile = trackSend(_sendFile);
+export const sendLocation = trackSend(_sendLocation);
+export const sendContact = trackSend(_sendContact);
+export const sendPoll = trackSend(_sendPoll);
+export const fetchChats = trackRead(_fetchChats);
+export const downloadMediaAsBase64 = trackRead(_downloadMediaAsBase64);

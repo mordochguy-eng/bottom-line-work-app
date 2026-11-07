@@ -3,28 +3,18 @@ import { api } from '../api.js';
 import { useToast } from '../components/Toast.jsx';
 
 const defaults = {
-  provider: 'green',
-  apiUrl: 'https://api.green-api.com',
-  idInstance: '',
-  apiTokenInstance: '',
   geminiApiKey: '',
   recipientChatId: '',
   digestTime: '21:00',
-  briefingTime: '07:30',
-  workerUrl: '',
-  workerAuthToken: ''
+  briefingTime: '07:30'
 };
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState(defaults);
   const [saving, setSaving] = useState(false);
-  const [status, setStatus] = useState(null);
-  const [checking, setChecking] = useState(false);
   const [syncConfig, setSyncConfig] = useState(null);
   const [syncLog, setSyncLog] = useState([]);
   const [syncing, setSyncing] = useState(false);
-  const [workerStatus, setWorkerStatus] = useState(null);
-  const [workerSyncing, setWorkerSyncing] = useState(false);
   const [wa, setWa] = useState(null);
   const [waBusy, setWaBusy] = useState(false);
   const toast = useToast();
@@ -33,15 +23,6 @@ export default function SettingsPage() {
     try { setWa(await api.getWhatsappConnection()); } catch { /* backend not ready yet */ }
   }
 
-  async function handleWaConnect() {
-    setWaBusy(true);
-    try {
-      const res = await api.whatsappConnect();
-      setSettings(p => ({ ...p, provider: 'baileys' }));
-      setWa(res);
-      toast('עברת לחיבור ישיר. סרוק את ה-QR שמופיע.', 'success');
-    } catch (err) { toast(err.message, 'error'); } finally { setWaBusy(false); }
-  }
   async function handleWaRestart() {
     setWaBusy(true);
     try { setWa(await api.whatsappRestart()); } catch (err) { toast(err.message, 'error'); } finally { setWaBusy(false); }
@@ -51,31 +32,19 @@ export default function SettingsPage() {
     setWaBusy(true);
     try { setWa(await api.whatsappLogout()); } catch (err) { toast(err.message, 'error'); } finally { setWaBusy(false); }
   }
-  async function handleWaBackToGreen() {
-    setWaBusy(true);
-    try {
-      await api.saveSettings({ provider: 'green' });
-      setSettings(p => ({ ...p, provider: 'green' }));
-      setWa({ provider: 'green' });
-      toast('חזרת ל-Green API', 'success');
-    } catch (err) { toast(err.message, 'error'); } finally { setWaBusy(false); }
-  }
-
   // While pairing / reconnecting, poll the connection state so the QR and status stay fresh.
   useEffect(() => {
-    if (settings.provider !== 'baileys') return undefined;
     loadWa();
     const t = setInterval(loadWa, 3000);
     return () => clearInterval(t);
-  }, [settings.provider]);
+  }, []);
 
   async function load() {
     try {
-      const [s, sc, sl, ws] = await Promise.all([api.getSettings(), api.getSyncConfig(), api.getSyncLog(), api.getWorkerStatus()]);
+      const [s, sc, sl] = await Promise.all([api.getSettings(), api.getSyncConfig(), api.getSyncLog()]);
       setSettings({ ...defaults, ...s });
       setSyncConfig(sc);
       setSyncLog(sl);
-      setWorkerStatus(ws);
     } catch (err) { toast(err.message, 'error'); }
   }
 
@@ -88,16 +57,6 @@ export default function SettingsPage() {
       await api.saveSettings(settings);
       toast('ההגדרות נשמרו', 'success');
     } catch (err) { toast(err.message, 'error'); } finally { setSaving(false); }
-  }
-
-  async function handleCheckConnection() {
-    setChecking(true);
-    try {
-      await api.saveSettings(settings); // always test what's currently in the form, not stale saved values
-      const res = await api.getInstanceStatus();
-      setStatus(res);
-      toast(res.connected ? 'מחובר בהצלחה ל-Green API' : `לא מחובר: ${res.reason || res.raw?.stateInstance || ''}`, res.connected ? 'success' : 'error');
-    } catch (err) { toast(err.message, 'error'); } finally { setChecking(false); }
   }
 
   async function handleSync() {
@@ -113,17 +72,6 @@ export default function SettingsPage() {
     } catch (err) { toast(err.message, 'error'); } finally { setSyncing(false); }
   }
 
-  async function handleSyncWorkerConfig() {
-    setWorkerSyncing(true);
-    try {
-      await api.saveSettings(settings); // make sure the Worker URL/token fields are saved first
-      await api.syncWorkerConfig();
-      toast('פרטי Green API נשלחו ל-Worker בהצלחה', 'success');
-      const ws = await api.getWorkerStatus();
-      setWorkerStatus(ws);
-    } catch (err) { toast(err.message, 'error'); } finally { setWorkerSyncing(false); }
-  }
-
   return (
     <>
       <div className="page-header">
@@ -137,69 +85,29 @@ export default function SettingsPage() {
         <div className="glass-card">
           <h3 style={{ marginBottom: 8 }}>חיבור וואטסאפ</h3>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: 12 }}>
-            חיבור ישיר (Baileys): בלי ספק חיצוני ובלי התקנות. החיבור רץ על המחשב הזה — כשהוא כבוי לא יישלחו הודעות מתוזמנות.
+            החיבור רץ על המחשב הזה, ישירות מול וואטסאפ. כשהמחשב כבוי לא יישלחו הודעות מתוזמנות ולא יאספו הודעות חדשות.
           </p>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-            <span className={`badge ${settings.provider === 'baileys' ? 'badge-success' : 'badge-danger'}`}>
-              ספק פעיל: {settings.provider === 'baileys' ? 'חיבור ישיר (Baileys)' : 'Green API'}
-            </span>
-            {settings.provider === 'baileys' && wa && (
+            {wa && (
               <span className={`badge ${wa.connected ? 'badge-success' : 'badge-danger'}`}>
                 {wa.connected ? `מחובר${wa.user ? ' — ' + String(wa.user.id).split(':')[0].split('@')[0] : ''}` : ({ qr: 'ממתין לסריקת QR', starting: 'מתחבר...', reconnecting: 'מתחבר מחדש...', loggedOut: 'מנותק מהטלפון', replaced: 'הוחלף בתהליך אחר', error: 'שגיאה', idle: 'לא פעיל' }[wa.status] || wa.status)}
               </span>
             )}
           </div>
-          {settings.provider !== 'baileys' ? (
-            <button type="button" className="btn btn-primary" onClick={handleWaConnect} disabled={waBusy}>
-              {waBusy ? 'מתחבר...' : '🔗 עבור לחיבור ישיר (Baileys)'}
-            </button>
-          ) : (
-            <>
-              {wa && wa.hasQr && wa.qrDataUrl && (
-                <div style={{ marginBottom: 12 }}>
-                  <p style={{ fontSize: '0.9rem', marginBottom: 6 }}>בטלפון: וואטסאפ ← מכשירים מקושרים ← קישור מכשיר, וסרוק:</p>
-                  <img src={wa.qrDataUrl} alt="QR" style={{ width: 240, height: 240, background: '#fff', padding: 8, borderRadius: 8 }} />
-                </div>
-              )}
-              {wa && wa.hasQr && !wa.qrDataUrl && <p style={{ color: 'var(--text-muted)' }}>QR מוכן אך חבילת qrcode לא מותקנת — הרץ npm install ב-backend.</p>}
-              {wa && wa.error && <p style={{ color: 'var(--danger, #dc2626)', fontSize: '0.85rem', marginBottom: 8 }}>{wa.error}</p>}
-              {wa && wa.store && <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: 8 }}>נשמרו {wa.store.chats} שיחות ו-{wa.store.contacts} אנשי קשר מקומית</p>}
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button type="button" className="btn" onClick={handleWaRestart} disabled={waBusy}>🔄 התחבר מחדש</button>
-                <button type="button" className="btn" onClick={handleWaLogout} disabled={waBusy}>🔑 חבר מספר אחר / QR חדש</button>
-                <button type="button" className="btn" onClick={handleWaBackToGreen} disabled={waBusy}>↩️ חזור ל-Green API</button>
-              </div>
-            </>
+          {wa && wa.hasQr && wa.qrDataUrl && (
+            <div style={{ marginBottom: 12 }}>
+              <p style={{ fontSize: '0.9rem', marginBottom: 6 }}>בטלפון: וואטסאפ ← מכשירים מקושרים ← קישור מכשיר, וסרוק:</p>
+              <img src={wa.qrDataUrl} alt="QR" style={{ width: 240, height: 240, background: '#fff', padding: 8, borderRadius: 8 }} />
+            </div>
           )}
-        </div>
-
-        {settings.provider !== 'baileys' && (
-        <div className="glass-card">
-          <h3 style={{ marginBottom: 16 }}>Green API (חיבור וואטסאפ)</h3>
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">כתובת API</label>
-              <input className="form-input" value={settings.apiUrl} onChange={e => setSettings(p => ({ ...p, apiUrl: e.target.value }))} />
-            </div>
-            <div className="form-group">
-              <label className="form-label">idInstance</label>
-              <input className="form-input" value={settings.idInstance} onChange={e => setSettings(p => ({ ...p, idInstance: e.target.value }))} />
-            </div>
-            <div className="form-group">
-              <label className="form-label">apiTokenInstance</label>
-              <input className="form-input" type="password" value={settings.apiTokenInstance} onChange={e => setSettings(p => ({ ...p, apiTokenInstance: e.target.value }))} />
-            </div>
+          {wa && wa.hasQr && !wa.qrDataUrl && <p style={{ color: 'var(--text-muted)' }}>QR מוכן אך חבילת qrcode לא מותקנת — הרץ npm install ב-backend.</p>}
+          {wa && wa.error && <p style={{ color: 'var(--danger, #dc2626)', fontSize: '0.85rem', marginBottom: 8 }}>{wa.error}</p>}
+          {wa && wa.store && <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: 8 }}>נשמרו {wa.store.chats} שיחות ו-{wa.store.contacts} אנשי קשר מקומית</p>}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button type="button" className="btn" onClick={handleWaRestart} disabled={waBusy}>🔄 התחבר מחדש</button>
+            <button type="button" className="btn" onClick={handleWaLogout} disabled={waBusy}>🔑 חבר מספר אחר / QR חדש</button>
           </div>
-          <button type="button" className="btn" onClick={handleCheckConnection} disabled={checking}>
-            {checking ? 'בודק...' : '🔌 בדוק חיבור'}
-          </button>
-          {status && (
-            <span className={`badge ${status.connected ? 'badge-success' : 'badge-danger'}`} style={{ marginRight: 12 }}>
-              {status.connected ? 'מחובר' : 'לא מחובר'}
-            </span>
-          )}
         </div>
-        )}
 
         <div className="glass-card">
           <h3 style={{ marginBottom: 16 }}>Gemini AI</h3>
@@ -224,33 +132,6 @@ export default function SettingsPage() {
               <label className="form-label">שעת תדרוך בוקר</label>
               <input className="form-input" type="time" value={settings.briefingTime} onChange={e => setSettings(p => ({ ...p, briefingTime: e.target.value }))} />
             </div>
-          </div>
-        </div>
-
-        <div className="glass-card">
-          <h3 style={{ marginBottom: 8 }}>☁️ הודעות מתוזמנות בענן (Cloudflare Worker)</h3>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', marginBottom: 14 }}>
-            אופציונלי. כשמוגדר, הודעות מתוזמנות נשלחות דרך שירות ענן קטן ונפרד — כך שהן יוצאות בזמן גם אם המחשב הזה כבוי. שאר האפליקציה (סיכומים, משימות, האזנה חיה) ממשיכה לרוץ מקומית כרגיל. הקמה חד-פעמית מתוארת ב-<code>cloudflare-worker/README.md</code>.
-          </p>
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">כתובת ה-Worker</label>
-              <input className="form-input" value={settings.workerUrl} onChange={e => setSettings(p => ({ ...p, workerUrl: e.target.value }))} placeholder="https://your-worker.workers.dev" />
-            </div>
-            <div className="form-group">
-              <label className="form-label">טוקן אבטחה (AUTH_TOKEN)</label>
-              <input className="form-input" type="password" value={settings.workerAuthToken} onChange={e => setSettings(p => ({ ...p, workerAuthToken: e.target.value }))} />
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button type="button" className="btn btn-primary" onClick={handleSyncWorkerConfig} disabled={workerSyncing || !settings.workerUrl || !settings.workerAuthToken}>
-              {workerSyncing ? 'שולח...' : '☁️ שמור וסנכרן פרטי Green API ל-Worker'}
-            </button>
-            {workerStatus?.configured && (
-              <span className={`badge ${workerStatus.connected ? 'badge-success' : 'badge-danger'}`}>
-                {workerStatus.connected ? (workerStatus.greenApiConfigured ? 'מחובר ומוגדר' : 'מחובר, חסרים פרטי Green API') : 'לא ניתן להתחבר'}
-              </span>
-            )}
           </div>
         </div>
 

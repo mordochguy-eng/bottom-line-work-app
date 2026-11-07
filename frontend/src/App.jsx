@@ -8,6 +8,7 @@ import ApprovalQueuePage from './pages/ApprovalQueuePage.jsx';
 import ScheduledMessagesPage from './pages/ScheduledMessagesPage.jsx';
 import ActivityLogPage from './pages/ActivityLogPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
+import WhatsAppStatusBanner from './components/WhatsAppStatusBanner.jsx';
 
 const NAV_ITEMS = [
   { key: 'home', label: 'דף הבית', icon: '🏠' },
@@ -80,6 +81,7 @@ function AppInner() {
           <div className="sidebar-footer">דשבורד וואטסאפ אישי לעבודה</div>
         </aside>
         <main className="main-content">
+          <WhatsAppStatusBanner onOpenSettings={() => setActiveTab('settings')} />
           <Page onCompose={openComposeFor} prefill={composePrefill} onConsumePrefill={() => setComposePrefill(null)} />
         </main>
       </div>

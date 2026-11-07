@@ -1,5 +1,5 @@
 import * as db from './database.js';
-import * as greenApi from './whatsapp.js';
+import * as wa from './baileysClient.js';
 import * as scheduler from './scheduler.js';
 import { scanChatForActions, identifyRecurringMotifs } from './gemini.js';
 
@@ -13,7 +13,7 @@ import { scanChatForActions, identifyRecurringMotifs } from './gemini.js';
  * questions for the motif analysis (much faster when the answer is "just
  * characterize what people ask" over a large, old-message segment).
  *
- * getChatHistory works per chat regardless of Green API's notification
+ * getChatHistory works per chat regardless of the WhatsApp notification
  * settings (it syncs directly from WhatsApp), so this reliably reaches real
  * history; the cost is one API call per chat, plus one Gemini call per chat
  * when task extraction is on. Runs as a background job (not inside the
@@ -73,9 +73,9 @@ export function startHistoryScan(options) {
 
 async function buildSegments(settings) {
   const [rawContacts, groups, allChats] = await Promise.all([
-    greenApi.getContacts(settings.apiUrl, settings.idInstance, settings.apiTokenInstance),
+    wa.getContacts(),
     db.getChats(),
-    greenApi.fetchAllChatsRaw(settings.apiUrl, settings.idInstance, settings.apiTokenInstance)
+    wa.fetchAllChatsRaw()
   ]);
 
   // contactName (not name!) is the field that reflects a real phone-book
@@ -123,7 +123,7 @@ async function scanSegment(settings, label, targets, cutoffSeconds, remainingLim
     if (remainingLimit != null && count >= remainingLimit) break;
     count++;
     try {
-      const history = await greenApi.fetchChatHistory(settings.apiUrl, settings.idInstance, settings.apiTokenInstance, target.chat_id, 100);
+      const history = await wa.fetchChatHistory(target.chat_id, 100);
       const recent = cutoffSeconds ? history.filter(m => m.timestamp >= cutoffSeconds) : history;
       if (recent.length > 0) {
         state.chatsWithHistory++;
@@ -166,9 +166,6 @@ async function scanSegment(settings, label, targets, cutoffSeconds, remainingLim
 
 async function runScan({ days, limit, segmentKeys, extractTasks = true }) {
   const settings = await db.getSettings();
-  if (!greenApi.isConfigured(settings)) {
-    throw new Error('לא הוגדרו פרטי Green API בהגדרות');
-  }
   if (!settings.geminiApiKey) {
     throw new Error('לא הוגדר מפתח Gemini בהגדרות');
   }

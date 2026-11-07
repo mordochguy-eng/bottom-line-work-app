@@ -1,8 +1,8 @@
 import * as db from './database.js';
-import * as greenApi from './whatsapp.js';
+import * as wa from './baileysClient.js';
 import { draftAutoReply, analyzeMessageForAction } from './gemini.js';
 
-// Single polling loop over Green API's notification queue, feeding two
+// Single polling loop over the in-memory notification queue (filled by baileysClient), feeding two
 // independent pipelines per incoming message:
 //   1. Auto-reply drafting (1:1 only, contact/FAQ-gated) -> approval queue.
 //   2. Live insight extraction (every chat, group or 1:1) -> action items.
@@ -10,9 +10,8 @@ import { draftAutoReply, analyzeMessageForAction } from './gemini.js';
 // running their own — two independent pollers would each steal half the
 // notifications from the other.
 //
-// Green API keeps the queue server-side for a limited window (about a day)
-// even while nothing is polling it, so re-enabling (or hitting "sync now")
-// catches up on whatever accumulated in the meantime — it isn't lost.
+// While the computer is off nothing is collected; WhatsApp usually redelivers recent
+// missed messages when the connection comes back (they arrive through the same queue).
 
 const IDLE_INTERVAL_MS = 4000; // how often we check when the queue was empty last time
 const BUSY_DELAY_MS = 250;     // how fast we drain back-to-back when there's a backlog
@@ -93,15 +92,14 @@ async function runLiveInsights(settings, parsed) {
 async function processOneNotification() {
   const settings = await db.getSettings();
   if (!settings.autoReplyEnabled && !settings.liveInsightsEnabled) return { found: false };
-  if (!greenApi.isConfigured(settings)) return { found: false };
 
-  const notification = await greenApi.receiveNotification(settings.apiUrl, settings.idInstance, settings.apiTokenInstance);
+  const notification = await wa.receiveNotification();
   if (!notification) return { found: false };
 
   let replyQueued = false;
   let insightAdded = false;
   try {
-    const parsed = greenApi.parseIncomingMessage(notification);
+    const parsed = notification.parsed;
     if (parsed && settings.geminiApiKey) {
       const [r, i] = await Promise.all([
         runAutoReply(settings, parsed).catch(err => { console.error('[messageListener] auto-reply error:', err.message); return false; }),
@@ -112,8 +110,6 @@ async function processOneNotification() {
     }
   } catch (err) {
     console.error('[messageListener] Error processing notification:', err.message);
-  } finally {
-    await greenApi.deleteNotification(settings.apiUrl, settings.idInstance, settings.apiTokenInstance, notification.receiptId);
   }
   return { found: true, replyQueued, insightAdded };
 }

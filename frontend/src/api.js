@@ -13,7 +13,7 @@ export const api = {
   saveSettings: (patch) => request('/settings', { method: 'POST', body: JSON.stringify(patch) }),
   getInstanceStatus: () => request('/instance-status'),
   getWhatsappConnection: () => request('/whatsapp/connection'),
-  whatsappConnect: () => request('/whatsapp/connect', { method: 'POST' }),
+  getWhatsappHealth: () => request('/whatsapp/health'),
   whatsappRestart: () => request('/whatsapp/restart', { method: 'POST' }),
   whatsappLogout: () => request('/whatsapp/logout', { method: 'POST' }),
 
@@ -44,8 +44,6 @@ export const api = {
   updateScheduledMessage: (id, patch) => request(`/scheduled-messages/${id}`, { method: 'PUT', body: JSON.stringify(patch) }),
   deleteScheduledMessage: (id) => request(`/scheduled-messages/${id}`, { method: 'DELETE' }),
 
-  getWorkerStatus: () => request('/worker/status'),
-  syncWorkerConfig: () => request('/worker/sync-config', { method: 'POST' }),
   uploadMedia: (file) => fetch('/api/upload-media', {
     method: 'POST',
     headers: { 'Content-Type': file.type || 'application/octet-stream', 'X-Filename': encodeURIComponent(file.name) },

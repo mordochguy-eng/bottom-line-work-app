@@ -67,7 +67,7 @@ export default function TasksPage() {
   // "אחראי" comes from Gemini as "who owes the action" — in a personal (1:1)
   // chat that's almost always the person on the other side of the
   // conversation, so it doubles as the contact's display name whenever
-  // Green API's real phone-book has no better name for that number. In a
+  // The real WhatsApp phone-book has no better name for that number. In a
   // group chat it can be the group or a specific member, so it is NOT
   // treated as a contact identity there.
   //
@@ -479,7 +479,7 @@ export default function TasksPage() {
           </div>
 
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', margin: 0 }}>
-            כשההאזנה פעילה, כל הודעה נכנסת (בקבוצות ובצ'אטים אישיים) נבדקת אוטומטית ברקע — כשהתור ריק היא נבדקת כל כמה שניות, וכשמצטברות כמה הודעות ביחד היא מרוקנת אותן ברצף מהיר. "סנכרן עכשיו" מריק את התור מיידית בלי לחכות, כולל כל מה שהצטבר מאז הפעם האחרונה (Green API שומר את התור גם כשההאזנה כבויה, לזמן מוגבל).
+            כשההאזנה פעילה, כל הודעה נכנסת (בקבוצות ובצ'אטים אישיים) נבדקת אוטומטית ברקע — כשהתור ריק היא נבדקת כל כמה שניות, וכשמצטברות כמה הודעות ביחד היא מרוקנת אותן ברצף מהיר. "סנכרן עכשיו" מריק את התור מיידית בלי לחכות, כולל כל מה שהצטבר מאז הפעם האחרונה (כשהמחשב כבוי לא נאספות הודעות; וואטסאפ בדרך כלל משלים את האחרונות כשהחיבור חוזר).
             "נתח היסטוריה" סורק את הפלחים שנבחרו ומחפש בכל אחד שאלות שחוזרות על עצמן, כדי להציע שאלות נפוצות (FAQ) ללשונית "תור אישור תגובות". ביטול "גם ליצור משימות" מריץ רק את איסוף השאלות לאפיון — הרבה יותר מהיר, בלי ליצור משימות לפניות ישנות. משימות כפולות מדולגות אוטומטית.
           </p>
         </div>
