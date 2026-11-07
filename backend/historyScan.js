@@ -1,5 +1,5 @@
 import * as db from './database.js';
-import * as greenApi from './greenApi.js';
+import * as greenApi from './whatsapp.js';
 import * as scheduler from './scheduler.js';
 import { scanChatForActions, identifyRecurringMotifs } from './gemini.js';
 
@@ -166,7 +166,7 @@ async function scanSegment(settings, label, targets, cutoffSeconds, remainingLim
 
 async function runScan({ days, limit, segmentKeys, extractTasks = true }) {
   const settings = await db.getSettings();
-  if (!settings.apiUrl || !settings.idInstance || !settings.apiTokenInstance) {
+  if (!greenApi.isConfigured(settings)) {
     throw new Error('לא הוגדרו פרטי Green API בהגדרות');
   }
   if (!settings.geminiApiKey) {

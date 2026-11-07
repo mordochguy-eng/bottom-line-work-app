@@ -12,6 +12,10 @@ export const api = {
   getSettings: () => request('/settings'),
   saveSettings: (patch) => request('/settings', { method: 'POST', body: JSON.stringify(patch) }),
   getInstanceStatus: () => request('/instance-status'),
+  getWhatsappConnection: () => request('/whatsapp/connection'),
+  whatsappConnect: () => request('/whatsapp/connect', { method: 'POST' }),
+  whatsappRestart: () => request('/whatsapp/restart', { method: 'POST' }),
+  whatsappLogout: () => request('/whatsapp/logout', { method: 'POST' }),
 
   getChats: () => request('/chats'),
   getWhatsappContacts: () => request('/whatsapp-contacts'),

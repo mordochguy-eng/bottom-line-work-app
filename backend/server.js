@@ -3,7 +3,12 @@ import cors from 'cors';
 import cron from 'node-cron';
 
 import * as db from './database.js';
-import * as greenApi from './greenApi.js';
+// 'greenApi' is now the provider switch (whatsapp.js): same function signatures,
+// routes to Green API or Baileys depending on settings.provider.
+import * as greenApi from './whatsapp.js';
+import { UPLOAD_DIR } from './baileysClient.js';
+import fs from 'fs';
+import path from 'path';
 import * as gemini from './gemini.js';
 import * as scheduler from './scheduler.js';
 import * as sync from './sync.js';
@@ -38,6 +43,7 @@ app.post('/api/settings', async (req, res) => {
     // the UI doesn't silently fail every send.
     if (patch.recipientChatId) patch.recipientChatId = scheduler.normaliseChatId(patch.recipientChatId);
     const updated = await db.saveSettings(patch);
+    if ('provider' in patch) await greenApi.init(); // start/stop Baileys when the provider changes
     res.json(updated);
   } catch (error) { handleError(res, error); }
 });
@@ -45,7 +51,7 @@ app.post('/api/settings', async (req, res) => {
 app.get('/api/instance-status', async (req, res) => {
   try {
     const settings = await db.getSettings();
-    if (!settings.apiUrl || !settings.idInstance || !settings.apiTokenInstance) {
+    if (!greenApi.isConfigured(settings)) {
       return res.json({ connected: false, reason: 'לא הוגדרו פרטי Green API' });
     }
     const status = await greenApi.checkInstanceStatus(settings.apiUrl, settings.idInstance, settings.apiTokenInstance);
@@ -78,7 +84,7 @@ const WHATSAPP_CONTACTS_TTL_MS = 15 * 60 * 1000;
 
 async function refreshWhatsappContactsCache() {
   const settings = await db.getSettings();
-  if (!settings.idInstance) return;
+  if (!greenApi.isConfigured(settings)) return;
   // One retry on 429 — Green API's rate limit is often a few-second window,
   // so a short wait usually clears it instead of surfacing to the user.
   for (let attempt = 1; attempt <= 2; attempt++) {
@@ -426,6 +432,14 @@ app.get('/api/worker/status', async (req, res) => {
 app.post('/api/upload-media', express.raw({ type: '*/*', limit: '20mb' }), async (req, res) => {
   try {
     const settings = await db.getSettings();
+    if (settings.provider === 'baileys') {
+      // Baileys runs on this machine, so uploads are stored locally and sent from disk.
+      fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+      const safe = path.basename(decodeURIComponent(req.get('X-Filename') || 'file')).replace(/[^\w.\-֐-׿ ]+/g, '_');
+      const stored = `${Date.now()}-${safe}`;
+      fs.writeFileSync(path.join(UPLOAD_DIR, stored), req.body);
+      return res.json({ url: `local-upload:${stored}`, filename: safe });
+    }
     if (!workerProxy.isWorkerConfigured(settings)) return res.status(400).json({ error: 'Worker לא מוגדר — העלאת קבצים דורשת Worker מוגדר' });
     const contentType = req.get('Content-Type') || 'application/octet-stream';
     const filename = req.get('X-Filename') || 'file';
@@ -540,7 +554,7 @@ app.post('/api/approval-queue/:id/reject', async (req, res) => {
 // on — it's off by default on a fresh Green API instance, so both toggles
 // below fix it up front instead of silently listening to an empty queue.
 async function ensureListenerReady(settings) {
-  if (!settings.apiUrl || !settings.idInstance || !settings.apiTokenInstance) return;
+  if (!greenApi.isConfigured(settings)) return;
   await greenApi.ensureIncomingWebhookEnabled(settings.apiUrl, settings.idInstance, settings.apiTokenInstance);
 }
 
@@ -754,7 +768,7 @@ async function dispatchScheduledMessage(settings, msg) {
 cron.schedule('* * * * *', async () => {
   try {
     const settings = await db.getSettings();
-    if (!settings.apiUrl) return;
+    if (!greenApi.isConfigured(settings)) return;
     // The Cloudflare Worker owns dispatch once configured — messages live
     // in its KV store, not here, so running this too would either find
     // nothing (harmless) or, if something was ever mirrored locally,
@@ -795,7 +809,45 @@ cron.schedule('* * * * *', async () => {
   }
 });
 
+// ---------- WhatsApp connection (Baileys): status + QR pairing ----------
+// The QR code is a pairing secret, so these routes only answer requests that
+// come from this computer itself (the server listens on the network too).
+const isLocalRequest = (req) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
+
+app.get('/api/whatsapp/connection', async (req, res) => {
+  try {
+    if (!isLocalRequest(req)) return res.status(403).json({ error: 'זמין רק מהמחשב עצמו' });
+    const provider = await greenApi.getProvider();
+    if (provider !== 'baileys') return res.json({ provider });
+    res.json({ provider, ...greenApi.baileys.getStatus() });
+  } catch (error) { handleError(res, error); }
+});
+
+app.post('/api/whatsapp/connect', async (req, res) => {
+  try {
+    if (!isLocalRequest(req)) return res.status(403).json({ error: 'זמין רק מהמחשב עצמו' });
+    await db.saveSettings({ provider: 'baileys' });
+    await greenApi.init();
+    res.json({ provider: 'baileys', ...greenApi.baileys.getStatus() });
+  } catch (error) { handleError(res, error); }
+});
+
+app.post('/api/whatsapp/restart', async (req, res) => {
+  try {
+    if (!isLocalRequest(req)) return res.status(403).json({ error: 'זמין רק מהמחשב עצמו' });
+    res.json(await greenApi.baileys.restart());
+  } catch (error) { handleError(res, error); }
+});
+
+app.post('/api/whatsapp/logout', async (req, res) => {
+  try {
+    if (!isLocalRequest(req)) return res.status(403).json({ error: 'זמין רק מהמחשב עצמו' });
+    res.json(await greenApi.baileys.logout());
+  } catch (error) { handleError(res, error); }
+});
+
 app.listen(PORT, () => {
   console.log(`בשורה התחתונה — עבודה: השרת רץ על פורט ${PORT}`);
   startMessageListener();
+  greenApi.init(); // connects Baileys on startup when it is the selected provider
 });

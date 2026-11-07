@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import { useToast } from '../components/Toast.jsx';
 
 const defaults = {
+  provider: 'green',
   apiUrl: 'https://api.green-api.com',
   idInstance: '',
   apiTokenInstance: '',
@@ -24,7 +25,49 @@ export default function SettingsPage() {
   const [syncing, setSyncing] = useState(false);
   const [workerStatus, setWorkerStatus] = useState(null);
   const [workerSyncing, setWorkerSyncing] = useState(false);
+  const [wa, setWa] = useState(null);
+  const [waBusy, setWaBusy] = useState(false);
   const toast = useToast();
+
+  async function loadWa() {
+    try { setWa(await api.getWhatsappConnection()); } catch { /* backend not ready yet */ }
+  }
+
+  async function handleWaConnect() {
+    setWaBusy(true);
+    try {
+      const res = await api.whatsappConnect();
+      setSettings(p => ({ ...p, provider: 'baileys' }));
+      setWa(res);
+      toast('עברת לחיבור ישיר. סרוק את ה-QR שמופיע.', 'success');
+    } catch (err) { toast(err.message, 'error'); } finally { setWaBusy(false); }
+  }
+  async function handleWaRestart() {
+    setWaBusy(true);
+    try { setWa(await api.whatsappRestart()); } catch (err) { toast(err.message, 'error'); } finally { setWaBusy(false); }
+  }
+  async function handleWaLogout() {
+    if (!window.confirm('זה ינתק את החיבור הנוכחי וידרוש סריקת QR חדשה. להמשיך?')) return;
+    setWaBusy(true);
+    try { setWa(await api.whatsappLogout()); } catch (err) { toast(err.message, 'error'); } finally { setWaBusy(false); }
+  }
+  async function handleWaBackToGreen() {
+    setWaBusy(true);
+    try {
+      await api.saveSettings({ provider: 'green' });
+      setSettings(p => ({ ...p, provider: 'green' }));
+      setWa({ provider: 'green' });
+      toast('חזרת ל-Green API', 'success');
+    } catch (err) { toast(err.message, 'error'); } finally { setWaBusy(false); }
+  }
+
+  // While pairing / reconnecting, poll the connection state so the QR and status stay fresh.
+  useEffect(() => {
+    if (settings.provider !== 'baileys') return undefined;
+    loadWa();
+    const t = setInterval(loadWa, 3000);
+    return () => clearInterval(t);
+  }, [settings.provider]);
 
   async function load() {
     try {
@@ -92,6 +135,46 @@ export default function SettingsPage() {
 
       <form onSubmit={handleSave}>
         <div className="glass-card">
+          <h3 style={{ marginBottom: 8 }}>חיבור וואטסאפ</h3>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: 12 }}>
+            חיבור ישיר (Baileys): בלי ספק חיצוני ובלי התקנות. החיבור רץ על המחשב הזה — כשהוא כבוי לא יישלחו הודעות מתוזמנות.
+          </p>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+            <span className={`badge ${settings.provider === 'baileys' ? 'badge-success' : 'badge-danger'}`}>
+              ספק פעיל: {settings.provider === 'baileys' ? 'חיבור ישיר (Baileys)' : 'Green API'}
+            </span>
+            {settings.provider === 'baileys' && wa && (
+              <span className={`badge ${wa.connected ? 'badge-success' : 'badge-danger'}`}>
+                {wa.connected ? `מחובר${wa.user ? ' — ' + String(wa.user.id).split(':')[0].split('@')[0] : ''}` : ({ qr: 'ממתין לסריקת QR', starting: 'מתחבר...', reconnecting: 'מתחבר מחדש...', loggedOut: 'מנותק מהטלפון', replaced: 'הוחלף בתהליך אחר', error: 'שגיאה', idle: 'לא פעיל' }[wa.status] || wa.status)}
+              </span>
+            )}
+          </div>
+          {settings.provider !== 'baileys' ? (
+            <button type="button" className="btn btn-primary" onClick={handleWaConnect} disabled={waBusy}>
+              {waBusy ? 'מתחבר...' : '🔗 עבור לחיבור ישיר (Baileys)'}
+            </button>
+          ) : (
+            <>
+              {wa && wa.hasQr && wa.qrDataUrl && (
+                <div style={{ marginBottom: 12 }}>
+                  <p style={{ fontSize: '0.9rem', marginBottom: 6 }}>בטלפון: וואטסאפ ← מכשירים מקושרים ← קישור מכשיר, וסרוק:</p>
+                  <img src={wa.qrDataUrl} alt="QR" style={{ width: 240, height: 240, background: '#fff', padding: 8, borderRadius: 8 }} />
+                </div>
+              )}
+              {wa && wa.hasQr && !wa.qrDataUrl && <p style={{ color: 'var(--text-muted)' }}>QR מוכן אך חבילת qrcode לא מותקנת — הרץ npm install ב-backend.</p>}
+              {wa && wa.error && <p style={{ color: 'var(--danger, #dc2626)', fontSize: '0.85rem', marginBottom: 8 }}>{wa.error}</p>}
+              {wa && wa.store && <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: 8 }}>נשמרו {wa.store.chats} שיחות ו-{wa.store.contacts} אנשי קשר מקומית</p>}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button type="button" className="btn" onClick={handleWaRestart} disabled={waBusy}>🔄 התחבר מחדש</button>
+                <button type="button" className="btn" onClick={handleWaLogout} disabled={waBusy}>🔑 חבר מספר אחר / QR חדש</button>
+                <button type="button" className="btn" onClick={handleWaBackToGreen} disabled={waBusy}>↩️ חזור ל-Green API</button>
+              </div>
+            </>
+          )}
+        </div>
+
+        {settings.provider !== 'baileys' && (
+        <div className="glass-card">
           <h3 style={{ marginBottom: 16 }}>Green API (חיבור וואטסאפ)</h3>
           <div className="form-row">
             <div className="form-group">
@@ -116,6 +199,7 @@ export default function SettingsPage() {
             </span>
           )}
         </div>
+        )}
 
         <div className="glass-card">
           <h3 style={{ marginBottom: 16 }}>Gemini AI</h3>

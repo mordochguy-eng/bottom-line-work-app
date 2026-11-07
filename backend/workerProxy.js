@@ -7,6 +7,9 @@ import axios from 'axios';
 // double-sending from both places.
 
 export function isWorkerConfigured(settings) {
+  // With Baileys the WhatsApp connection lives on this computer, so the cloud
+  // Worker could not send anything: scheduled messages are dispatched locally.
+  if (settings.provider === 'baileys') return false;
   return !!(settings.workerUrl && settings.workerAuthToken);
 }
 

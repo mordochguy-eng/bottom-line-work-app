@@ -1,5 +1,5 @@
 import * as db from './database.js';
-import * as greenApi from './greenApi.js';
+import * as greenApi from './whatsapp.js';
 import { draftAutoReply, analyzeMessageForAction } from './gemini.js';
 
 // Single polling loop over Green API's notification queue, feeding two
@@ -93,7 +93,7 @@ async function runLiveInsights(settings, parsed) {
 async function processOneNotification() {
   const settings = await db.getSettings();
   if (!settings.autoReplyEnabled && !settings.liveInsightsEnabled) return { found: false };
-  if (!settings.apiUrl || !settings.idInstance || !settings.apiTokenInstance) return { found: false };
+  if (!greenApi.isConfigured(settings)) return { found: false };
 
   const notification = await greenApi.receiveNotification(settings.apiUrl, settings.idInstance, settings.apiTokenInstance);
   if (!notification) return { found: false };
